@@ -15,28 +15,7 @@ pub enum MovableItem<'a> {
     Crate(&'a Crate),
 }
 
-pub struct BoardElem<'a>(Option<MovableItem<'a>>, CellKind);
-
-/*
-// TODO: Display shouldn't be done here...
-
-const SYMBOL_PLAYER: char = 'P';
-const SYMBOL_CRATE: char = '#';
-const SYMBOL_PLACED_CRATE: char = 'x';
-
-impl fmt::Display for BoardElem {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use CellKind::*;
-        use MovableItem::*;
-        match self {
-            BoardElem(None, c) => write!(f, "{}", c),
-            BoardElem(Some(Player), _) => write!(f, "{}", SYMBOL_PLAYER),
-            BoardElem(Some(Crate), Floor) => write!(f, "{}", SYMBOL_CRATE),
-            BoardElem(Some(Crate), Target) => write!(f, "{}", SYMBOL_PLACED_CRATE),
-        }
-    }
-}
-*/
+pub struct BoardElem<'a>(pub Option<MovableItem<'a>>, pub CellKind);
 
 /// The [`Board`] contains the [`Map`], the items ([crates](`Crate`) and the [player](`Player`)) on
 /// top.
@@ -52,7 +31,8 @@ impl Board {
         &self.map
     }
 
-    fn try_get<'a>(&'a self, i: isize, j: isize) -> Option<BoardElem<'a>> {
+    /*
+    pub fn try_get(&self, i: isize, j: isize) -> Option<BoardElem> {
         if let Some(c) = self.map.try_get(i, j) {
             if self.player == (i, j) {
                 Some(BoardElem(Some(MovableItem::Player), c))
@@ -65,8 +45,9 @@ impl Board {
             None
         }
     }
+    */
 
-    fn get<'a>(&'a self, i: isize, j: isize) -> BoardElem<'a> {
+    pub fn get(&self, i: isize, j: isize) -> BoardElem {
         let c = self.map.get(i, j);
 
         if self.player == (i, j) {
@@ -109,15 +90,16 @@ impl Board {
 
     /// Actually moves if it can move and returns `true`, or `false` if it couldn't move.
     /// Returns:
-    /// - `Some(Some(&Crate))` if it can move by pushing a crate,
+    /// - `Some(Some((i,j)))` if it can move by pushing a crate, with (i,j) being the new
+    /// coordinates of the crate,
     /// - `Some(None)` if it can move without pushing a crate,
     /// - `None` if it can't move at all.
-    pub fn do_move_player<'a>(&'a mut self, dir: Direction) -> Option<Option<&'a Crate>> {
+    pub fn do_move_player(&mut self, dir: Direction) -> Option<Option<(isize, isize)>> {
         if let Some(is_crate) = self.can_player_move(dir) {
             let (i, j) = dir.to_coords(self.player.0, self.player.1);
 
             // If there's a crate to be pushed, move it first:
-            let c_opt: Option<&'a Crate> = if is_crate {
+            let c_opt = if is_crate {
                 let c = self.crates.iter_mut().find(|c| c.pos() == (i, j)).expect(
                     "It was annouced that the player would push a crate, but there isn't any.",
                 );
@@ -132,7 +114,7 @@ impl Board {
                 }
                 */
 
-                Some(c)
+                Some(c.pos())
             } else {
                 None
             };
@@ -143,18 +125,43 @@ impl Board {
             None
         }
     }
+
+    pub fn width(&self) -> usize {
+        self.map.width()
+    }
+
+    pub fn height(&self) -> usize {
+        self.map.height()
+    }
+
+    pub fn has_won(&self) -> bool {
+        self.crates.iter().all(|c| c.is_placed(self))
+    }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum LevelParseError {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LevelParseError {
+    MissingMap,
+    MissingPlayerCoordinates,
+    MissingCratesCoordinates,
     CantParseMap(<Map as FromStr>::Err),
+    CantParsePlayerCoordinates(String),
+    CantParseCrateCoordinates(String),
 }
 
 impl fmt::Display for LevelParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use LevelParseError::*;
         match self {
             // TODO: not debug
-            LevelParseError::CantParseMap(err) => write!(f, "Can't parse map string: {:?}", err),
+            MissingMap => write!(f, "Can't find map in file."),
+            MissingPlayerCoordinates => write!(f, "Can't find player data in file."),
+            MissingCratesCoordinates => write!(f, "Can't find crates data in file."),
+            CantParseMap(err) => write!(f, "Can't parse map string: {:?}", err),
+            CantParsePlayerCoordinates(err) => {
+                write!(f, "Can't parse player coordinates: {:?}", err)
+            }
+            CantParseCrateCoordinates(err) => write!(f, "Can't parse crate coordinates: {:?}", err),
         }
     }
 }
@@ -162,10 +169,66 @@ impl fmt::Display for LevelParseError {
 impl Error for LevelParseError {}
 
 impl FromStr for Board {
-    // TODO: Better error ?
     type Err = LevelParseError;
 
     fn from_str(src: &str) -> Result<Self, Self::Err> {
-        src.lines()
+        // TODO: better format of map will only a map and reading player and crate space from
+        // symbols only.
+        // TODO: filter necessary?
+        let mut blocks = src.split("\n\n").filter(|l| l.is_empty());
+
+        let map = {
+            let map = blocks.next().ok_or(LevelParseError::MissingMap)?;
+            Map::from_str(map).map_err(LevelParseError::CantParseMap)?
+        };
+
+        let player = {
+            let player_line = blocks
+                .next()
+                .ok_or(LevelParseError::MissingPlayerCoordinates)?;
+
+            let err = || LevelParseError::CantParsePlayerCoordinates(String::from(player_line));
+
+            let mut player = player_line
+                .split(',')
+                .map(|n| isize::from_str(n).map_err(|_| err()));
+
+            (
+                player.next().ok_or_else(err)??,
+                player.next().ok_or_else(err)??,
+            )
+        };
+
+        let crates = {
+            let crates_lines = blocks
+                .next()
+                .ok_or(LevelParseError::MissingCratesCoordinates)?;
+
+            let mut crates = Vec::with_capacity(crates_lines.lines().count());
+
+            for line in crates_lines.lines() {
+                // TODO: extract function?
+                // TODO: c'est moche...
+                let err = || LevelParseError::CantParseCrateCoordinates(String::from(line));
+
+                let mut c = line
+                    .split(',')
+                    .map(|n| isize::from_str(n).map_err(|_| err()));
+
+                crates.push(Crate::new(
+                    c.next().ok_or_else(err)??,
+                    c.next().ok_or_else(err)??,
+                ));
+            }
+            crates
+        };
+
+        // TODO: ensure all crates have a target?
+
+        Ok(Board {
+            map,
+            player,
+            crates,
+        })
     }
 }

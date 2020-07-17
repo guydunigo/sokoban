@@ -5,7 +5,7 @@ use std::{convert::TryFrom, fmt, str::FromStr};
 const SYMBOL_VOID: char = ' ';
 const SYMBOL_FLOOR: char = '.';
 const SYMBOL_WALL: char = '#';
-const SYMBOL_TARGET: char = 'x';
+const SYMBOL_TARGET: char = 'X';
 
 /// When representing the map, each square can have one of these types.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,23 +170,35 @@ impl FromStr for Map {
 
 /// Counts how many lines and columns there is in the board representation.
 fn get_width_height(src: &str) -> (usize, usize) {
-    let height = src.lines().filter(|l| !l.is_empty()).count();
+    let height = src.lines().count();
     let width = src
         .lines()
-        .filter(|l| !l.is_empty())
         .map(|l| l.len())
-        .fold(0, |p, l| if p > l { p } else { l });
+        .max()
+        .expect("Empty map while it should already be checked.");
     (width, height)
 }
 
 // TODO: have a test map and check width, height, ...
 // TODO: try display -> parse -> display equality
-/*
 #[cfg(test)]
 mod tests {
+    const TEST_MAP: &str = "  #####
+###   #
+#x    #
+###  x#
+#x##  #
+# # x ##
+#  x  x#
+#   x  #
+########";
+    const WIDTH: usize = 8;
+    const HEIGHT: usize = 9;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn it_gets_correct_width_height() {
+        let (w, h) = super::get_width_height(TEST_MAP);
+        assert_eq!(WIDTH, w, "Didn't extract correct width.");
+        assert_eq!(HEIGHT, h, "Didn't extract correct height.");
     }
 }
-*/

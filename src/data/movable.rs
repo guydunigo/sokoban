@@ -5,10 +5,10 @@ use super::{Board, BoardElem, CellKind};
 /// Direction a [`Movable`] can be moved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
-    West,
-    East,
-    North,
-    South,
+    Left,
+    Right,
+    Up,
+    Down,
 }
 
 impl Direction {
@@ -16,10 +16,10 @@ impl Direction {
         use Direction::*;
 
         let delta = match self {
-            West => (-1, 0),
-            East => (1, 0),
-            North => (0, -1),
-            South => (0, 1),
+            Left => (-1, 0),
+            Right => (1, 0),
+            Up => (0, -1),
+            Down => (0, 1),
         };
 
         (i + delta.0, j + delta.1)
@@ -34,6 +34,10 @@ pub struct Crate {
 }
 
 impl Crate {
+    pub fn new(i: isize, j: isize) -> Self {
+        Crate { i, j }
+    }
+
     pub fn pos(&self) -> (isize, isize) {
         (self.i, self.j)
     }
@@ -49,7 +53,7 @@ impl Crate {
     }
 
     /// Actually change the coordinates of the crates, but you'd better ensure it can be moved
-    /// (thanks to [`Crate::can_move`]).
+    /// (using [`Crate::can_move`]).
     pub fn do_move(&mut self, dir: Direction) {
         let (i, j) = dir.to_coords(self.i, self.j);
         self.i = i;
@@ -57,7 +61,7 @@ impl Crate {
     }
 
     /// If it is on a [`CellKind::Target`].
-    fn is_placed(&self, board: &Board) -> bool {
+    pub fn is_placed(&self, board: &Board) -> bool {
         if let CellKind::Target = board.map().get(self.i as isize, self.j as isize) {
             true
         } else {

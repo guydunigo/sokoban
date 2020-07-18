@@ -175,7 +175,7 @@ impl FromStr for Board {
         // TODO: better format of map will only a map and reading player and crate space from
         // symbols only.
         // TODO: filter necessary?
-        let mut blocks = src.split("\n\n").filter(|l| l.is_empty());
+        let mut blocks = src.split("\n\n").filter(|l| !l.is_empty());
 
         let map = {
             let map = blocks.next().ok_or(LevelParseError::MissingMap)?;

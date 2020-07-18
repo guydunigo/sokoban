@@ -22,6 +22,7 @@ pub enum CellKind {
 
 impl CellKind {
     /// It isn't crossable if it is [`CellKind::Void`] or a [`CellKind::Wall`].
+    // TODO: test ?
     pub fn is_crossable(&self) -> bool {
         use CellKind::*;
         match self {
@@ -84,10 +85,10 @@ pub struct Map {
 impl fmt::Display for Map {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for i in 0..self.squares.len() {
-            write!(f, "{}", self.squares[i])?;
-            if i % self.width == 0 {
+            if i > 0 && i % self.width == 0 {
                 writeln!(f)?;
             }
+            write!(f, "{}", self.squares[i])?;
         }
         Ok(())
     }
@@ -121,7 +122,7 @@ impl Map {
     pub fn try_get(&self, i: isize, j: isize) -> Option<CellKind> {
         // I don't like the conversion, but at the same time, if there's a conv problem,
         // we're already dead in terms of memory space...
-        if i >= 0 && i < (self.width as isize) && j <= 0 && j < (self.height as isize) {
+        if i >= 0 && i < (self.width as isize) && j >= 0 && j < (self.height as isize) {
             Some(self.squares[(j as usize) * self.width + (i as usize)])
         } else {
             None
@@ -183,22 +184,105 @@ fn get_width_height(src: &str) -> (usize, usize) {
 // TODO: try display -> parse -> display equality
 #[cfg(test)]
 mod tests {
-    const TEST_MAP: &str = "  #####
-###   #
-#x    #
-###  x#
-#x##  #
-# # x ##
-#  x  x#
-#   x  #
+    use super::{CellKind::*, Map};
+
+    const TEST_MAP_STR: &str = "  #####
+###...#
+#X....#
+###..X#
+#X##..#
+#.#.X.##
+#..X..X#
+#...X..#
 ########";
+
     const WIDTH: usize = 8;
     const HEIGHT: usize = 9;
 
+    fn test_map() -> Map {
+        Map {
+            width: WIDTH,
+            height: HEIGHT,
+            squares: vec![
+                Void, Void, Wall, Wall, Wall, Wall, Wall, Void, Wall, Wall, Wall, Floor, Floor,
+                Floor, Wall, Void, Wall, Target, Floor, Floor, Floor, Floor, Wall, Void, Wall,
+                Wall, Wall, Floor, Floor, Target, Wall, Void, Wall, Target, Wall, Wall, Floor,
+                Floor, Wall, Void, Wall, Floor, Wall, Floor, Target, Floor, Wall, Wall, Wall,
+                Floor, Floor, Target, Floor, Floor, Target, Wall, Wall, Floor, Floor, Floor,
+                Target, Floor, Floor, Wall, Wall, Wall, Wall, Wall, Wall, Wall, Wall, Wall,
+            ],
+        }
+    }
+
     #[test]
     fn it_gets_correct_width_height() {
-        let (w, h) = super::get_width_height(TEST_MAP);
+        let (w, h) = super::get_width_height(TEST_MAP_STR);
         assert_eq!(WIDTH, w, "Didn't extract correct width.");
         assert_eq!(HEIGHT, h, "Didn't extract correct height.");
+    }
+
+    #[test]
+    fn it_correctly_parses_map() {
+        let reference = test_map();
+        let parsed: Map = TEST_MAP_STR.parse().unwrap();
+        assert_eq!(reference, parsed);
+    }
+
+    #[test]
+    fn it_correctly_parses_and_displays_map() {
+        // In case of trailing space, but this does overcomplicate things (more error prone...).
+        let displayed_map = format!("{}", TEST_MAP_STR.parse::<Map>().unwrap())
+            .lines()
+            .map(|l| l.trim())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let orig_test_map_str = TEST_MAP_STR
+            .lines()
+            .map(|l| l.trim())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(displayed_map, orig_test_map_str,);
+    }
+
+    #[test]
+    fn it_gets_a_cell_from_ref_map() {
+        let map = test_map();
+
+        assert_eq!(map.try_get(0, 0), Some(Void));
+        assert_eq!(map.get(0, 0), Void);
+
+        assert_eq!(map.try_get(0, 1), Some(Wall));
+        assert_eq!(map.get(0, 1), Wall);
+
+        assert_eq!(map.try_get(3, 1), Some(Floor));
+        assert_eq!(map.get(3, 1), Floor);
+
+        assert_eq!(map.try_get(1, 2), Some(Target));
+        assert_eq!(map.get(1, 2), Target);
+
+        // Outside range:
+        assert_eq!(map.try_get((WIDTH as isize) + 10, 1), None);
+        assert_eq!(map.get((WIDTH as isize) + 10, 1), Void);
+    }
+
+    #[test]
+    fn it_gets_a_cell_from_parsed_map() {
+        let map: Map = TEST_MAP_STR.parse().unwrap();
+
+        assert_eq!(map.try_get(0, 0), Some(Void));
+        assert_eq!(map.get(0, 0), Void);
+
+        assert_eq!(map.try_get(0, 1), Some(Wall));
+        assert_eq!(map.get(0, 1), Wall);
+
+        assert_eq!(map.try_get(3, 1), Some(Floor));
+        assert_eq!(map.get(3, 1), Floor);
+
+        assert_eq!(map.try_get(1, 2), Some(Target));
+        assert_eq!(map.get(1, 2), Target);
+
+        // Outside range:
+        assert_eq!(map.try_get((WIDTH as isize) + 10, 1), None);
+        assert_eq!(map.get((WIDTH as isize) + 10, 1), Void);
     }
 }

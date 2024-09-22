@@ -71,6 +71,7 @@ impl Ui for Cli {
                     "r" | "right" => break Ok(Direction::Right),
                     "u" | "up" => break Ok(Direction::Up),
                     "d" | "down" => break Ok(Direction::Down),
+                    // TODO: better handle of quitting + reload
                     "e" | "exit" => break Err(Box::new(CliError::Exit)),
                     _ => println!("Unknown command `{}`, please try again:", buffer.trim()),
                 },

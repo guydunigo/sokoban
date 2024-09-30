@@ -12,7 +12,7 @@ pub enum Direction {
 }
 
 impl Direction {
-    pub fn to_coords(&self, i: isize, j: isize) -> (isize, isize) {
+    pub fn to_coords(self, i: isize, j: isize) -> (isize, isize) {
         use Direction::*;
 
         let delta = match self {
@@ -62,11 +62,7 @@ impl Crate {
 
     /// If it is on a [`CellKind::Target`].
     pub fn is_placed(&self, board: &Board) -> bool {
-        if let CellKind::Target = board.map().get(self.i as isize, self.j as isize) {
-            true
-        } else {
-            false
-        }
+        matches!(board.map().get(self.i, self.j), CellKind::Target)
     }
 }
 

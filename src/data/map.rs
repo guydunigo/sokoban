@@ -25,10 +25,7 @@ impl CellKind {
     // TODO: test ?
     pub fn is_crossable(&self) -> bool {
         use CellKind::*;
-        match self {
-            Void | Wall => false,
-            _ => true,
-        }
+        !matches!(self, Void | Wall)
     }
 }
 

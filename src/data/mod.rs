@@ -91,7 +91,7 @@ impl Board {
     /// Actually moves if it can move and returns `true`, or `false` if it couldn't move.
     /// Returns:
     /// - `Some(Some((i,j)))` if it can move by pushing a crate, with (i,j) being the new
-    /// coordinates of the crate,
+    ///   coordinates of the crate,
     /// - `Some(None)` if it can move without pushing a crate,
     /// - `None` if it can't move at all, and the displayed map doesn't need change.
     pub fn do_move_player(&mut self, dir: Direction) -> Option<Option<(isize, isize)>> {

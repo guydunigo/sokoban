@@ -12,7 +12,9 @@ use crossterm::{
     style, terminal, QueueableCommand,
 };
 
-const WON_MESSAGE: &str = "You won!";
+const WON_MESSAGE_PADDING: u16 = 3;
+const WON_MESSAGE_LN_1: &str = "You won!";
+const WON_MESSAGE_LN_2: &str = "(Press any key to quit...)";
 
 #[derive(Debug)]
 pub enum TuiError {
@@ -115,14 +117,14 @@ impl Ui for Tui {
 
             stdout.queue(terminal::Clear(terminal::ClearType::All))?;
 
-            let (original_cols, original_rows) = terminal::size()?;
+            let (term_cols, term_rows) = terminal::size()?;
 
-            if original_cols < cols || original_rows < rows {
+            if term_cols < cols || term_rows < rows {
                 return Err(Box::new(TuiError::MapTooLarge));
             }
 
-            let start_col = original_cols / 2 - cols / 2;
-            let start_row = original_rows / 2 - rows / 2;
+            let start_col = term_cols / 2 - cols / 2;
+            let start_row = term_rows / 2 - rows / 2;
 
             for j in 0..rows {
                 for i in 0..cols {
@@ -145,6 +147,27 @@ impl Ui for Tui {
                         .queue(style::Print(symbol))?;
                 }
             }
+
+            if board.has_won() {
+                let start_right = start_col + cols + WON_MESSAGE_PADDING;
+                /*
+                let won_message_max_len = u16::try_from(
+                    WON_MESSAGE_LN_1
+                        .chars()
+                        .count()
+                        .max(WON_MESSAGE_LN_2.chars().count()),
+                )
+                .expect("Won message should fit in a u16.");
+                */
+
+                stdout
+                    .queue(cursor::MoveTo(start_right, term_rows / 2 - 1))?
+                    .queue(style::Print(WON_MESSAGE_LN_1))?
+                    .queue(cursor::MoveToNextLine(2))?
+                    .queue(cursor::MoveRight(start_right))?
+                    .queue(style::Print(WON_MESSAGE_LN_2))?;
+            }
+
             stdout.flush()?;
         };
         res.map_err(|e| Box::new(TuiError::IO(e)))?;
@@ -153,38 +176,7 @@ impl Ui for Tui {
     }
 
     fn won(&self) -> Result<(), Box<dyn Error>> {
-        let res: Result<(), io::Error> = try {
-            let mut stdout = io::stdout();
-
-            /*
-            let (cols, rows) = (WON_MESSAGE.chars().count() as u16, 1);
-            let (original_cols, original_rows) = terminal::size()?;
-
-            if original_cols < cols || original_rows < rows {
-            */
-            stdout
-                .queue(cursor::MoveTo(0, 0))?
-                .queue(style::Print(WON_MESSAGE))?;
-            /*
-            }
-
-            let start_col = original_cols / 2 - cols / 2;
-            let start_row = original_rows / 2 - rows / 2;
-
-            for j in 0..rows {
-                for i in 0..cols {
-                    stdout
-                        .queue(cursor::MoveTo(start_col + i, start_row + j))?
-                        .queue(style::Print("I"))?;
-                }
-            }
-            */
-            stdout.flush()?;
-
-            event::read()?;
-        };
-        res.map_err(|e| Box::new(TuiError::IO(e)))?;
-
+        event::read().map_err(|e| Box::new(TuiError::IO(e)))?;
         Ok(())
     }
 }

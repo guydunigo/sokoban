@@ -57,6 +57,7 @@ fn game_loop(ui: &dyn Ui, level: &str) -> Result<(), GameError> {
                     Action::Redraw => ui.display(&board, None)?,
                     Action::Movement(dir) => {
                         let res = board.do_move_player(dir);
+
                         ui.display(&board, res)?;
 
                         if let Some(Some(_)) = res {

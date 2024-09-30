@@ -30,7 +30,7 @@ pub enum Action {
     ResetLevel,
     /// Quit game
     Quit,
-    /// Asks the engine to call `Ui::display`, e.g. in case of a resize event.
+    /// Asks the engine to call [`Ui::display`], e.g. in case of a resize event.
     Redraw,
     // TODO: LoadLevel(String path)
 }
@@ -56,13 +56,15 @@ pub trait Ui {
     /// For instance, in `last_move_result` is `None`, it means the player couldn't move, so the
     /// display might not need to be updated, but might trigger a sound.
     /// See [`Board::do_move_player`] for more information on `last_move_result`.
+    ///
+    /// It can directly check and react on [`Board::has_won`].
     fn display(
         &self,
         board: &Board,
         last_move_result: Option<Option<(isize, isize)>>,
     ) -> Result<(), Box<dyn Error>>;
 
-    /// Display winning screen and quits the game when this function returns.
+    /// The game is won and will quit the game when this function returns.
     fn won(&self) -> Result<(), Box<dyn Error>>;
 }
 

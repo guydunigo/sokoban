@@ -13,7 +13,7 @@ fn main() {
         }
     };
 
-    match sokoban::game(&level[..], sokoban::DisplayKind::CLI) {
+    match sokoban::game(sokoban::DisplayKind::TUI, &level[..]) {
         Ok(()) => (),
         Err(err) => eprintln!("Game exited.\n{}", err),
     }

@@ -3,9 +3,10 @@ use std::error::Error;
 use super::data::{Board, BoardElem, CellKind, Direction, MovableItem};
 
 mod cli;
+mod terminal;
 use cli::Cli;
-// mod tui;
-// use tui::Tui;
+mod tui;
+use tui::Tui;
 // mod gui;
 // use gui::Gui;
 
@@ -14,8 +15,8 @@ use cli::Cli;
 pub enum DisplayKind {
     /// Basic terminal prompt.
     CLI,
-    // /// Dynamic terminal display.
-    // TUI,
+    /// Dynamic terminal display.
+    TUI,
     // /// 2D graphics.
     // GUI,
 }
@@ -34,8 +35,19 @@ pub enum Action {
 
 /// Describes a generic interface to play the game.
 pub trait Ui {
+    /// All the setup needed for the UI : opening window, ...
+    fn initialize() -> Result<Self, Box<dyn Error>>
+    where
+        Self: Sized;
+
+    /// All the cleaning needed for the UI : closing window, resetting terminal, ...
+    // TODO: cleanup should take Self and destroy
+    fn cleanup(&self) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+
     /// Get last input from user. This is usually blocking.
-    fn get_input(&mut self) -> Result<Action, Box<dyn Error>>;
+    fn get_input(&self) -> Result<Action, Box<dyn Error>>;
 
     /// Updates the display based on the board provided and the result of the last move and if it
     /// pushed a crate.
@@ -43,23 +55,23 @@ pub trait Ui {
     /// display might not need to be updated, but might trigger a sound.
     /// See [`Board::do_move_player`] for more information on `last_move_result`.
     fn display(
-        &mut self,
+        &self,
         board: &Board,
         last_move_result: Option<Option<(isize, isize)>>,
     ) -> Result<(), Box<dyn Error>>;
 
     /// Display winning screen and quits the game when this function returns.
-    fn won(&mut self) -> Result<(), Box<dyn Error>>;
+    fn won(&self) -> Result<(), Box<dyn Error>>;
 }
 
-pub fn new_ui(kind: DisplayKind) -> Box<dyn Ui> {
+pub fn new(kind: DisplayKind) -> Result<Box<dyn Ui>, Box<dyn Error>> {
     use DisplayKind::*;
 
-    match kind {
-        CLI => Box::new(Cli::new()),
-        // TUI -> Box::new(Tui::new()),
+    Ok(match kind {
+        CLI => Box::new(Cli::initialize()?),
+        TUI => Box::new(Tui::initialize()?),
         // GUI -> Box::new(Gui::new()),
-    }
+    })
 }
 
 #[cfg(test)]

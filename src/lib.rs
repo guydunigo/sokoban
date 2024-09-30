@@ -1,3 +1,4 @@
+#![feature(try_blocks)]
 //! Base data structures and functions to run a Sokoban-like game,
 //! see [`game`] to start it.
 use std::{error::Error, fmt, str::FromStr};
@@ -5,8 +6,8 @@ use std::{error::Error, fmt, str::FromStr};
 mod data;
 use data::{Board, LevelParseError};
 mod ui;
-pub use ui::DisplayKind;
-use ui::{new_ui, Action};
+use ui::Action;
+pub use ui::{DisplayKind, Ui};
 
 #[derive(Debug)]
 pub enum GameError {
@@ -34,10 +35,20 @@ impl From<LevelParseError> for GameError {
 
 /// Start the game by loading the level from the file content in `level_file`, and the display
 /// selection in `disp_kind`.
-pub fn game(level_file: &str, disp_kind: DisplayKind) -> Result<(), GameError> {
+pub fn game(disp_kind: DisplayKind, level: &str) -> Result<(), GameError> {
+    let ui = ui::new(disp_kind).map_err(GameError::UiError)?;
+
+    let res = game_loop(&ui, level);
+
+    // Whatever happened in the game, we close first.
+    ui.cleanup().map_err(GameError::UiError)?;
+
+    res
+}
+
+fn game_loop(ui: &Box<dyn Ui>, level: &str) -> Result<(), GameError> {
     loop {
-        let mut board = Board::from_str(level_file)?;
-        let mut ui = new_ui(disp_kind);
+        let mut board = Board::from_str(level)?;
 
         ui.display(&board, None).map_err(GameError::UiError)?;
         loop {
@@ -56,7 +67,9 @@ pub fn game(level_file: &str, disp_kind: DisplayKind) -> Result<(), GameError> {
                 Action::ResetLevel => {
                     break;
                 }
-                Action::Quit => return Ok(()),
+                Action::Quit => {
+                    return Ok(());
+                }
             }
         }
     }

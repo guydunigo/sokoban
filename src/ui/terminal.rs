@@ -1,0 +1,9 @@
+pub const SYMBOL_VOID: char = ' ';
+pub const SYMBOL_FLOOR: char = '.';
+// pub const SYMBOL_WALL: char = '#';
+pub const SYMBOL_WALL: char = '█';
+pub const SYMBOL_TARGET: char = 'X';
+pub const SYMBOL_PLAYER: char = 'P';
+pub const SYMBOL_PLAYER_ON_TARGET: char = 'R';
+pub const SYMBOL_CRATE: char = 'O';
+pub const SYMBOL_PLACED_CRATE: char = '8';

@@ -48,8 +48,8 @@ pub trait Ui {
         last_move_result: Option<Option<(isize, isize)>>,
     ) -> Result<(), Box<dyn Error>>;
 
-    /// Display winning screen and wait for action before closing.
-    fn won(&mut self, board: &Board) -> Result<(), Box<dyn Error>>;
+    /// Display winning screen and quits the game when this function returns.
+    fn won(&mut self) -> Result<(), Box<dyn Error>>;
 }
 
 pub fn new_ui(kind: DisplayKind) -> Box<dyn Ui> {

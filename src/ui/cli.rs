@@ -105,7 +105,7 @@ impl Ui for Cli {
         Ok(())
     }
 
-    fn won(&mut self, _board: &Board) -> Result<(), Box<dyn Error>> {
+    fn won(&mut self) -> Result<(), Box<dyn Error>> {
         println!("+----------+");
         println!("| You won! |");
         println!("+----------+");

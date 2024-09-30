@@ -48,7 +48,7 @@ pub fn game(level_file: &str, disp_kind: DisplayKind) -> Result<(), GameError> {
 
                     if let Some(Some(_)) = res {
                         if board.has_won() {
-                            ui.won(&board).map_err(GameError::UiError)?;
+                            ui.won().map_err(GameError::UiError)?;
                             return Ok(());
                         }
                     }

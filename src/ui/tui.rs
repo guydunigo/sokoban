@@ -9,9 +9,10 @@ use super::{terminal::*, Action, Board, BoardElem, CellKind, Direction, MovableI
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    style::{self, Print, Stylize},
-    terminal, ExecutableCommand, QueueableCommand,
+    style, terminal, QueueableCommand,
 };
+
+const WON_MESSAGE: &str = "You won!";
 
 #[derive(Debug)]
 pub enum TuiError {
@@ -24,11 +25,7 @@ impl fmt::Display for TuiError {
         use TuiError::*;
         match self {
             IO(other) => write!(f, "IO error with terminal : {}", other),
-            MapTooLarge => write!(
-                f,
-                "Board too big, maximum width and height for TUI : {}",
-                u16::MAX
-            ),
+            MapTooLarge => write!(f, "Board is bigger than screen."),
         }
     }
 }
@@ -37,47 +34,30 @@ impl Error for TuiError {}
 
 /// Base command-line interface.
 /// The whole scene is reprinted each step and the input isn't real-time.
-pub struct Tui {
-    original_cols: u16,
-    original_rows: u16,
-}
+pub struct Tui;
 
 impl Ui for Tui {
     fn initialize() -> Result<Self, Box<dyn Error>> {
-        // TODO: is resize even needed ?
-        /*
-        let cols = u16::try_from(board.width()).map_err(|_| TuiError::MapTooLarge)?;
-        let rows = u16::try_from(board.height()).map_err(|_| TuiError::MapTooLarge)?;
-        */
-        let res: Result<(u16, u16), io::Error> = try {
+        let res: Result<(), io::Error> = try {
             terminal::enable_raw_mode()?;
-
-            let original_cols_rows = terminal::size()?;
 
             let mut stdout = io::stdout();
 
             stdout
-                // .queue(terminal::SetSize(cols, rows))?;
                 .queue(cursor::Hide)?
                 // .queue(terminal::Clear(terminal::ClearType::All))?
                 .queue(terminal::EnterAlternateScreen)?
                 .queue(terminal::SetTitle("Sooban"))?;
 
             stdout.flush()?;
-
-            original_cols_rows
         };
-        let (original_cols, original_rows) = res.map_err(|e| Box::new(TuiError::IO(e)))?;
+        res.map_err(|e| Box::new(TuiError::IO(e)))?;
 
-        Ok(Tui {
-            original_cols,
-            original_rows,
-        })
+        Ok(Tui)
     }
 
     fn cleanup(&self) -> Result<(), Box<dyn Error>> {
         let res: Result<(), io::Error> = try {
-            // io::stdout().execute(terminal::SetSize(self.original_cols, self.original_rows))?;
             let mut stdout = io::stdout();
 
             stdout
@@ -96,13 +76,15 @@ impl Ui for Tui {
             let ev = event::read().map_err(|e| Box::new(TuiError::IO(e)))?;
             // io::stderr().execute(Print(format!("{:?}\n", ev)))?;
             match ev {
+                Event::Resize(_, _) => break Action::Redraw,
                 Event::Key(KeyEvent {
                     modifiers: KeyModifiers::NONE,
                     code,
                     ..
                 }) => match code {
                     KeyCode::Char('q') => break Action::Quit,
-                    KeyCode::Char('r') => break Action::Quit,
+                    KeyCode::Char('r') => break Action::ResetLevel,
+                    KeyCode::Char('d') => break Action::Redraw,
                     KeyCode::Left => break Action::Movement(Direction::Left),
                     KeyCode::Right => break Action::Movement(Direction::Right),
                     KeyCode::Up => break Action::Movement(Direction::Up),
@@ -111,12 +93,9 @@ impl Ui for Tui {
                 },
                 Event::Key(KeyEvent {
                     modifiers: KeyModifiers::CONTROL,
-                    code,
+                    code: KeyCode::Char('c'),
                     ..
-                }) => match code {
-                    KeyCode::Char('c') => break Action::Quit,
-                    _ => (),
-                },
+                }) => break Action::Quit,
                 _ => (),
             }
         };
@@ -128,17 +107,42 @@ impl Ui for Tui {
         board: &Board,
         _last_move_result: Option<Option<(isize, isize)>>,
     ) -> Result<(), Box<dyn Error>> {
+        let cols = u16::try_from(board.width()).map_err(|_| TuiError::MapTooLarge)?;
+        let rows = u16::try_from(board.height()).map_err(|_| TuiError::MapTooLarge)?;
+
         let res: Result<(), io::Error> = try {
             let mut stdout = io::stdout();
 
-            for y in 0..40 {
-                for x in 0..150 {
-                    if (y == 0 || y == 40 - 1) || (x == 0 || x == 150 - 1) {
-                        // in this loop we are more efficient by not flushing the buffer.
-                        stdout
-                            .queue(cursor::MoveTo(x, y))?
-                            .queue(style::PrintStyledContent("█".magenta()))?;
-                    }
+            stdout.queue(terminal::Clear(terminal::ClearType::All))?;
+
+            let (original_cols, original_rows) = terminal::size()?;
+
+            if original_cols < cols || original_rows < rows {
+                return Err(Box::new(TuiError::MapTooLarge));
+            }
+
+            let start_col = original_cols / 2 - cols / 2;
+            let start_row = original_rows / 2 - rows / 2;
+
+            for j in 0..rows {
+                for i in 0..cols {
+                    use CellKind::*;
+                    use MovableItem::*;
+
+                    let symbol = match board.get(i as isize, j as isize) {
+                        BoardElem(_, Void) => SYMBOL_VOID,
+                        BoardElem(_, Wall) => SYMBOL_WALL,
+                        BoardElem(None, Floor) => SYMBOL_FLOOR,
+                        BoardElem(None, Target) => SYMBOL_TARGET,
+                        BoardElem(Some(Player), Floor) => SYMBOL_PLAYER,
+                        BoardElem(Some(Crate(_)), Floor) => SYMBOL_CRATE,
+                        BoardElem(Some(Player), Target) => SYMBOL_PLAYER_ON_TARGET,
+                        BoardElem(Some(Crate(_)), Target) => SYMBOL_PLACED_CRATE,
+                    };
+
+                    stdout
+                        .queue(cursor::MoveTo(start_col + i, start_row + j))?
+                        .queue(style::Print(symbol))?;
                 }
             }
             stdout.flush()?;
@@ -149,12 +153,39 @@ impl Ui for Tui {
     }
 
     fn won(&self) -> Result<(), Box<dyn Error>> {
-        let res: Result<(), io::Error> = try {};
+        let res: Result<(), io::Error> = try {
+            let mut stdout = io::stdout();
+
+            /*
+            let (cols, rows) = (WON_MESSAGE.chars().count() as u16, 1);
+            let (original_cols, original_rows) = terminal::size()?;
+
+            if original_cols < cols || original_rows < rows {
+            */
+            stdout
+                .queue(cursor::MoveTo(0, 0))?
+                .queue(style::Print(WON_MESSAGE))?;
+            /*
+            }
+
+            let start_col = original_cols / 2 - cols / 2;
+            let start_row = original_rows / 2 - rows / 2;
+
+            for j in 0..rows {
+                for i in 0..cols {
+                    stdout
+                        .queue(cursor::MoveTo(start_col + i, start_row + j))?
+                        .queue(style::Print("I"))?;
+                }
+            }
+            */
+            stdout.flush()?;
+
+            event::read()?;
+        };
         res.map_err(|e| Box::new(TuiError::IO(e)))?;
 
-        todo!();
-
-        // Ok(())
+        Ok(())
     }
 }
 

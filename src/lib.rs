@@ -38,7 +38,7 @@ impl From<LevelParseError> for GameError {
 pub fn game(disp_kind: DisplayKind, level: &str) -> Result<(), GameError> {
     let ui = ui::new(disp_kind).map_err(GameError::UiError)?;
 
-    let res = game_loop(&ui, level);
+    let res = game_loop(ui.as_ref(), level);
 
     // Whatever happened in the game, we close first.
     ui.cleanup().map_err(GameError::UiError)?;
@@ -46,32 +46,36 @@ pub fn game(disp_kind: DisplayKind, level: &str) -> Result<(), GameError> {
     res
 }
 
-fn game_loop(ui: &Box<dyn Ui>, level: &str) -> Result<(), GameError> {
+fn game_loop(ui: &dyn Ui, level: &str) -> Result<(), GameError> {
     loop {
         let mut board = Board::from_str(level)?;
 
-        ui.display(&board, None).map_err(GameError::UiError)?;
-        loop {
-            match ui.get_input().map_err(GameError::UiError)? {
-                Action::Movement(dir) => {
-                    let res = board.do_move_player(dir);
-                    ui.display(&board, res).map_err(GameError::UiError)?;
+        let res: Result<(), Box<dyn Error>> = try {
+            ui.display(&board, None)?;
+            loop {
+                match ui.get_input()? {
+                    Action::Redraw => ui.display(&board, None)?,
+                    Action::Movement(dir) => {
+                        let res = board.do_move_player(dir);
+                        ui.display(&board, res)?;
 
-                    if let Some(Some(_)) = res {
-                        if board.has_won() {
-                            ui.won().map_err(GameError::UiError)?;
-                            return Ok(());
+                        if let Some(Some(_)) = res {
+                            if board.has_won() {
+                                ui.won()?;
+                                return Ok(());
+                            }
                         }
                     }
-                }
-                Action::ResetLevel => {
-                    break;
-                }
-                Action::Quit => {
-                    return Ok(());
+                    Action::ResetLevel => {
+                        break;
+                    }
+                    Action::Quit => {
+                        return Ok(());
+                    }
                 }
             }
-        }
+        };
+        res.map_err(GameError::UiError)?;
     }
 }
 

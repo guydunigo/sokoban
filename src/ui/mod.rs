@@ -30,6 +30,8 @@ pub enum Action {
     ResetLevel,
     /// Quit game
     Quit,
+    /// Asks the engine to call `Ui::display`, e.g. in case of a resize event.
+    Redraw,
     // TODO: LoadLevel(String path)
 }
 

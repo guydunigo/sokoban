@@ -5,8 +5,8 @@ use std::{error::Error, fmt, str::FromStr};
 mod data;
 use data::{Board, LevelParseError};
 mod ui;
-use ui::new_ui;
 pub use ui::DisplayKind;
+use ui::{new_ui, Action};
 
 #[derive(Debug)]
 pub enum GameError {
@@ -35,23 +35,31 @@ impl From<LevelParseError> for GameError {
 /// Start the game by loading the level from the file content in `level_file`, and the display
 /// selection in `disp_kind`.
 pub fn game(level_file: &str, disp_kind: DisplayKind) -> Result<(), GameError> {
-    let mut board = Board::from_str(level_file)?;
-    let mut ui = new_ui(disp_kind);
-
-    ui.display(&board, None).map_err(GameError::UiError)?;
     loop {
-        let dir = ui.get_input().map_err(GameError::UiError)?;
-        let res = board.do_move_player(dir);
-        ui.display(&board, res).map_err(GameError::UiError)?;
+        let mut board = Board::from_str(level_file)?;
+        let mut ui = new_ui(disp_kind);
 
-        if let Some(Some(_)) = res {
-            if board.has_won() {
-                break;
+        ui.display(&board, None).map_err(GameError::UiError)?;
+        loop {
+            match ui.get_input().map_err(GameError::UiError)? {
+                Action::Movement(dir) => {
+                    let res = board.do_move_player(dir);
+                    ui.display(&board, res).map_err(GameError::UiError)?;
+
+                    if let Some(Some(_)) = res {
+                        if board.has_won() {
+                            ui.won(&board).map_err(GameError::UiError)?;
+                            return Ok(());
+                        }
+                    }
+                }
+                Action::ResetLevel => {
+                    break;
+                }
+                Action::Quit => return Ok(()),
             }
         }
     }
-
-    ui.won(&board).map_err(GameError::UiError)
 }
 
 #[cfg(test)]

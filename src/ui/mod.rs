@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use super::data;
+use super::data::{Board, BoardElem, CellKind, Direction, MovableItem};
 
 mod cli;
 use cli::Cli;
@@ -20,10 +20,22 @@ pub enum DisplayKind {
     // GUI,
 }
 
+/// Actions available through the UI
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Action {
+    /// Basic terminal prompt.
+    Movement(Direction),
+    /// Resets the caracter and crates layout.
+    ResetLevel,
+    /// Quit game
+    Quit,
+    // TODO: LoadLevel(String path)
+}
+
 /// Describes a generic interface to play the game.
 pub trait Ui {
     /// Get last input from user. This is usually blocking.
-    fn get_input(&mut self) -> Result<data::Direction, Box<dyn Error>>;
+    fn get_input(&mut self) -> Result<Action, Box<dyn Error>>;
 
     /// Updates the display based on the board provided and the result of the last move and if it
     /// pushed a crate.
@@ -32,12 +44,12 @@ pub trait Ui {
     /// See [`Board::do_move_player`] for more information on `last_move_result`.
     fn display(
         &mut self,
-        board: &data::Board,
+        board: &Board,
         last_move_result: Option<Option<(isize, isize)>>,
     ) -> Result<(), Box<dyn Error>>;
 
     /// Display winning screen and wait for action before closing.
-    fn won(&mut self, board: &data::Board) -> Result<(), Box<dyn Error>>;
+    fn won(&mut self, board: &Board) -> Result<(), Box<dyn Error>>;
 }
 
 pub fn new_ui(kind: DisplayKind) -> Box<dyn Ui> {

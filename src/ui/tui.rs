@@ -3,6 +3,7 @@ use std::{
     error::Error,
     fmt,
     io::{self, Write},
+    panic,
 };
 
 use super::{terminal::*, Action, Board, BoardElem, CellKind, Direction, MovableItem, Ui};
@@ -55,6 +56,19 @@ impl Ui for Tui {
         };
         res.map_err(|e| Box::new(TuiError::IO(e)))?;
 
+        panic::set_hook(Box::new(|panic_info| {
+            Tui.cleanup()
+                .expect("Couldn't clean terminal back to normal.");
+
+            if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+                eprintln!("Panic occurred: {s:?}");
+            } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+                eprintln!("Panic occurred: {s:?}");
+            } else {
+                eprintln!("Panic occurred");
+            }
+        }));
+
         Ok(Tui)
     }
 
@@ -84,7 +98,7 @@ impl Ui for Tui {
                     code,
                     ..
                 }) => match code {
-                    KeyCode::Char('q') => break Action::Quit,
+                    KeyCode::Esc | KeyCode::Char('q') => break Action::Quit,
                     KeyCode::Char('r') => break Action::ResetLevel,
                     KeyCode::Char('d') => break Action::Redraw,
                     KeyCode::Left => break Action::Movement(Direction::Left),

@@ -91,25 +91,39 @@ impl ggez::event::EventHandler<GameError> for State {
             .dimensions(ctx)
             .expect("Can't get dimensions of wall picture !");
 
+        let rect = new_rectangle(ctx, dimensions)?;
+
+        let (board_w, board_h) = (self.board.width() as f32, self.board.height() as f32);
+        let (screen_w, screen_h) = ctx.gfx.size();
+
+        let (tot_w, tot_h) = (board_w * dimensions.w, board_h * dimensions.h);
+        let (scale_w, scale_h) = (screen_w / tot_w, screen_h / tot_h);
+        let min_scale = f32::min(scale_w, scale_h);
+
+        let scale = Vec2::new(min_scale, min_scale);
+
         for j in 0..self.board.height() {
             for i in 0..self.board.width() {
                 use CellKind::*;
                 use MovableItem::*;
 
-                let (x, y) = (i as f32 * dimensions.w, j as f32 * dimensions.h);
-                let params = DrawParam::default().dest(Vec2::new(x, y));
+                let (x, y) = (
+                    i as f32 * dimensions.w * min_scale,
+                    j as f32 * dimensions.h * min_scale,
+                );
+                let params = DrawParam::default().dest(Vec2::new(x, y)).scale(scale);
 
                 match self.board.get(i as isize, j as isize) {
                     BoardElem(_, Void) => (),
                     BoardElem(_, Wall) => canvas.draw(&self.images.mur, params),
-                    BoardElem(None, Floor) => canvas.draw(&new_rectangle(ctx, dimensions)?, params),
+                    BoardElem(None, Floor) => canvas.draw(&rect, params),
                     BoardElem(None, Target) => {
-                        canvas.draw(&new_rectangle(ctx, dimensions)?, params);
+                        canvas.draw(&rect, params);
                         canvas.draw(&self.images.objectif, params);
                     }
                     BoardElem(Some(Player), under) => {
                         match under {
-                            Floor => canvas.draw(&new_rectangle(ctx, dimensions)?, params),
+                            Floor => canvas.draw(&rect, params),
                             Target => {
                                 canvas.draw(&self.images.objectif, params);
                             }
@@ -134,7 +148,7 @@ impl ggez::event::EventHandler<GameError> for State {
             }
         }
         canvas.draw(
-            Text::new(format!("fps : {}", ctx.time.fps())).set_scale(32.),
+            Text::new(format!("fps : {}", ctx.time.fps() as i32)).set_scale(32.),
             DrawParam::default().dest(Vec2::ZERO),
         );
 

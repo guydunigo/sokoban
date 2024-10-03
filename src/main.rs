@@ -18,6 +18,11 @@ fn main() {
 
     match sokoban::game(sokoban::DisplayKind::TUI, &level[..]) {
         Ok(()) => (),
-        Err(err) => eprintln!("Game exited.\n{}", err),
+        Err(err) => eprintln!("Game exited with following error :\n{}", err),
+    }
+
+    match sokoban::game_ggez(&level[..]) {
+        Ok(()) => (),
+        Err(err) => eprintln!("Game exited with following error :\n{}", err),
     }
 }

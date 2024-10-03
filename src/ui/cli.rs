@@ -37,7 +37,7 @@ impl Ui for Cli {
         Ok(Cli)
     }
 
-    fn get_input(&self) -> Result<Action, Box<dyn Error>> {
+    fn get_action(&self, _board: &Board) -> Result<Action, Box<dyn Error>> {
         let action = loop {
             print!("> ");
 

@@ -1,4 +1,4 @@
-//! Base command-line interface.
+//! Interactive terminal interface.
 use std::{
     error::Error,
     fmt,
@@ -35,9 +35,25 @@ impl fmt::Display for TuiError {
 
 impl Error for TuiError {}
 
-/// Base command-line interface.
-/// The whole scene is reprinted each step and the input isn't real-time.
+/// Interactive terminal interface
 pub struct Tui;
+
+impl Tui {
+    fn cleanup_terminal() -> Result<(), Box<dyn Error>> {
+        let res: Result<(), io::Error> = try {
+            let mut stdout = io::stdout();
+
+            stdout
+                .queue(cursor::Show)?
+                .queue(terminal::LeaveAlternateScreen)?;
+            stdout.flush()?;
+            terminal::disable_raw_mode()?;
+        };
+        res.map_err(|e| Box::new(TuiError::IO(e)))?;
+
+        Ok(())
+    }
+}
 
 impl Ui for Tui {
     fn initialize() -> Result<Self, Box<dyn Error>> {
@@ -57,8 +73,7 @@ impl Ui for Tui {
         res.map_err(|e| Box::new(TuiError::IO(e)))?;
 
         panic::set_hook(Box::new(|panic_info| {
-            Tui.cleanup()
-                .expect("Couldn't clean terminal back to normal.");
+            Tui::cleanup_terminal().expect("Couldn't clean terminal back to normal.");
 
             if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
                 eprintln!("Panic occurred: {s:?}");
@@ -72,27 +87,16 @@ impl Ui for Tui {
         Ok(Tui)
     }
 
-    fn cleanup(&self) -> Result<(), Box<dyn Error>> {
-        let res: Result<(), io::Error> = try {
-            let mut stdout = io::stdout();
-
-            stdout
-                .queue(cursor::Show)?
-                .queue(terminal::LeaveAlternateScreen)?;
-            stdout.flush()?;
-            terminal::disable_raw_mode()?;
-        };
-        res.map_err(|e| Box::new(TuiError::IO(e)))?;
-
-        Ok(())
+    fn cleanup(self: Box<Self>) -> Result<(), Box<dyn Error>> {
+        Tui::cleanup_terminal()
     }
 
-    fn get_input(&self) -> Result<Action, Box<dyn Error>> {
+    fn get_action(&self, board: &Board) -> Result<Action, Box<dyn Error>> {
         let action = loop {
             let ev = event::read().map_err(|e| Box::new(TuiError::IO(e)))?;
             // io::stderr().execute(Print(format!("{:?}\n", ev)))?;
             match ev {
-                Event::Resize(_, _) => break Action::Redraw,
+                Event::Resize(_, _) => self.display(board, None)?,
                 Event::Key(KeyEvent {
                     modifiers: KeyModifiers::NONE,
                     code,
@@ -100,7 +104,7 @@ impl Ui for Tui {
                 }) => match code {
                     KeyCode::Esc | KeyCode::Char('q') => break Action::Quit,
                     KeyCode::Char('r') => break Action::ResetLevel,
-                    KeyCode::Char('d') => break Action::Redraw,
+                    KeyCode::Char('d') => self.display(board, None)?,
                     KeyCode::Left => break Action::Movement(Direction::Left),
                     KeyCode::Right => break Action::Movement(Direction::Right),
                     KeyCode::Up => break Action::Movement(Direction::Up),

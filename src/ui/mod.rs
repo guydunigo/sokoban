@@ -7,6 +7,8 @@ mod terminal;
 use cli::Cli;
 mod tui;
 use tui::Tui;
+mod ggez;
+pub use ggez::game_ggez;
 // mod gui;
 // use gui::Gui;
 
@@ -30,8 +32,6 @@ pub enum Action {
     ResetLevel,
     /// Quit game
     Quit,
-    /// Asks the engine to call [`Ui::display`], e.g. in case of a resize event.
-    Redraw,
     // TODO: LoadLevel(String path)
 }
 
@@ -44,12 +44,12 @@ pub trait Ui {
 
     /// All the cleaning needed for the UI : closing window, resetting terminal, ...
     // TODO: cleanup should take Self and destroy
-    fn cleanup(&self) -> Result<(), Box<dyn Error>> {
+    fn cleanup(self: Box<Self>) -> Result<(), Box<dyn Error>> {
         Ok(())
     }
 
     /// Get last input from user. This is usually blocking.
-    fn get_input(&self) -> Result<Action, Box<dyn Error>>;
+    fn get_action(&self, board: &Board) -> Result<Action, Box<dyn Error>>;
 
     /// Updates the display based on the board provided and the result of the last move and if it
     /// pushed a crate.

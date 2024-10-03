@@ -7,7 +7,7 @@ mod data;
 use data::{Board, LevelParseError};
 mod ui;
 use ui::Action;
-pub use ui::{DisplayKind, Ui};
+pub use ui::{game_ggez, DisplayKind, Ui};
 
 #[derive(Debug)]
 pub enum GameError {
@@ -53,13 +53,13 @@ fn game_loop(ui: &dyn Ui, level: &str) -> Result<(), GameError> {
         let res: Result<(), Box<dyn Error>> = try {
             ui.display(&board, None)?;
             loop {
-                match ui.get_input()? {
-                    Action::Redraw => ui.display(&board, None)?,
+                match ui.get_action(&board)? {
                     Action::Movement(dir) => {
                         let res = board.do_move_player(dir);
 
                         ui.display(&board, res)?;
 
+                        // Si on a déplacé une caisse.
                         if let Some(Some(_)) = res {
                             if board.has_won() {
                                 ui.won()?;

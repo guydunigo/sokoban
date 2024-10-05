@@ -24,6 +24,8 @@ pub struct Board {
     map: Map,
     player: (isize, isize),
     crates: Vec<Crate>,
+    original_player: (isize, isize),
+    original_crates: Vec<Crate>,
 }
 
 impl Board {
@@ -137,6 +139,11 @@ impl Board {
     pub fn has_won(&self) -> bool {
         self.crates.iter().all(|c| c.is_placed(self))
     }
+
+    pub fn reset(&mut self) {
+        self.player = self.original_player;
+        self.crates = self.original_crates.clone();
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -228,7 +235,9 @@ impl FromStr for Board {
         Ok(Board {
             map,
             player,
+            original_crates: crates.clone(),
             crates,
+            original_player: player,
         })
     }
 }

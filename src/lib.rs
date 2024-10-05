@@ -47,9 +47,8 @@ pub fn game(disp_kind: DisplayKind, level: &str) -> Result<(), GameError> {
 }
 
 fn game_loop(ui: &dyn Ui, level: &str) -> Result<(), GameError> {
+    let mut board = Board::from_str(level)?;
     loop {
-        let mut board = Board::from_str(level)?;
-
         let res: Result<(), Box<dyn Error>> = try {
             ui.display(&board, None)?;
             loop {
@@ -67,12 +66,8 @@ fn game_loop(ui: &dyn Ui, level: &str) -> Result<(), GameError> {
                             }
                         }
                     }
-                    Action::ResetLevel => {
-                        break;
-                    }
-                    Action::Quit => {
-                        return Ok(());
-                    }
+                    Action::ResetLevel => board.reset(),
+                    Action::Quit => return Ok(()),
                 }
             }
         };

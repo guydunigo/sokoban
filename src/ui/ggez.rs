@@ -5,7 +5,7 @@
 use std::{env, path::PathBuf, str::FromStr};
 
 use ggez::{
-    conf::Conf,
+    conf::{Conf, WindowMode},
     event,
     glam::Vec2,
     graphics::{self, Color, DrawMode, DrawParam, Drawable, Rect, Text, TextAlign, TextLayout},
@@ -16,8 +16,6 @@ use ggez::{
 use super::{Board, BoardElem, CellKind, Direction, MovableItem};
 
 pub fn game_ggez(level: &str) -> GameResult {
-    // todo!("Window size");
-
     let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         println!("{manifest_dir}");
         let mut path = PathBuf::from(manifest_dir);
@@ -30,6 +28,10 @@ pub fn game_ggez(level: &str) -> GameResult {
     let (ctx, event_loop) = ContextBuilder::new("Sokoban", "GuyDuNigo")
         .default_conf(Conf::default())
         .resources_dir_name(resource_dir)
+        .window_mode(WindowMode {
+            resizable: true,
+            ..Default::default()
+        })
         .build()
         .expect("Couldn't initialize context.");
 
@@ -56,7 +58,16 @@ struct State {
     images: Images,
     /// Direction indicating where the caracting is facing
     direction: Direction,
-    new_window_size: Option<(f32, f32)>,
+}
+
+struct ScaleInfos {
+    dimensions: Rect,
+    tot_w: f32,
+    tot_h: f32,
+    scale_w: f32,
+    scale_h: f32,
+    win_w: f32,
+    win_h: f32,
 }
 
 impl State {
@@ -75,7 +86,6 @@ impl State {
                 objectif: graphics::Image::from_path(ctx, "/objectif.png")?,
             },
             direction: Direction::Down,
-            new_window_size: None,
         };
 
         Ok(state)
@@ -86,8 +96,10 @@ impl State {
         self.direction = dir;
     }
 
-    /// (dimensions, tot_w, tot_h, scale_w, scale_h)
-    fn get_screen_scale(&self, ctx: &mut Context) -> (Rect, f32, f32, f32, f32) {
+    /// Calculates scale based on new window size.
+    ///
+    /// `win_resize` can contain the new size of the window, otherwise we get it from ctx.
+    fn get_screen_scale(&self, ctx: &mut Context, win_resize: Option<(f32, f32)>) -> ScaleInfos {
         let dimensions = self
             .images
             .mur
@@ -95,43 +107,40 @@ impl State {
             .expect("Can't get dimensions of wall picture !");
 
         let (board_w, board_h) = (self.board.width() as f32, self.board.height() as f32);
-        let (win_w, win_h) = ctx.gfx.size();
+        let (win_w, win_h) = win_resize.unwrap_or(ctx.gfx.size());
         let (tot_w, tot_h) = (board_w * dimensions.w, board_h * dimensions.h);
         let (scale_w, scale_h) = (win_w / tot_w, win_h / tot_h);
 
-        (dimensions, tot_w, tot_h, scale_w, scale_h)
+        ScaleInfos {
+            dimensions,
+            tot_w,
+            tot_h,
+            scale_w,
+            scale_h,
+            win_w,
+            win_h,
+        }
     }
 }
 
 impl ggez::event::EventHandler<GameError> for State {
-    fn update(&mut self, ctx: &mut Context) -> GameResult {
-        if ctx.time.ticks() % 100 == 0 {
-            if let Some((width, height)) = self.new_window_size.take() {
-                let (_, tot_w, tot_h, scale_w, scale_h) = self.get_screen_scale(ctx);
-
-                let (new_width, new_height) = if scale_w > scale_h {
-                    (tot_w * scale_h, height)
-                } else {
-                    (width, tot_h * scale_w)
-                };
-
-                if (new_width, new_height) != (width, height) {
-                    println!("{new_width},{new_height} | {width},{height}");
-                    ctx.gfx.set_drawable_size(new_width, new_height)?;
-                }
-            }
-        }
+    fn update(&mut self, _ctx: &mut Context) -> GameResult {
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
 
-        let (dimensions, _, _, scale_w, scale_h) = self.get_screen_scale(ctx);
+        let scale_infos = self.get_screen_scale(ctx, None);
 
-        let rect = graphics::Mesh::new_rectangle(ctx, DrawMode::fill(), dimensions, Color::WHITE)?;
+        let rect = graphics::Mesh::new_rectangle(
+            ctx,
+            DrawMode::fill(),
+            scale_infos.dimensions,
+            Color::WHITE,
+        )?;
 
-        let scale = f32::min(scale_w, scale_h);
+        let scale = f32::min(scale_infos.scale_w, scale_infos.scale_h);
         let scale_vec = Vec2::new(scale, scale);
 
         for j in 0..self.board.height() {
@@ -145,8 +154,8 @@ impl ggez::event::EventHandler<GameError> for State {
                 }
 
                 let (x, y) = (
-                    i as f32 * dimensions.w * scale,
-                    j as f32 * dimensions.h * scale,
+                    i as f32 * scale_infos.dimensions.w * scale,
+                    j as f32 * scale_infos.dimensions.h * scale,
                 );
                 let params = DrawParam::default().dest(Vec2::new(x, y)).scale(scale_vec);
 
@@ -253,9 +262,28 @@ impl ggez::event::EventHandler<GameError> for State {
         }
         Ok(())
     }
+    fn resize_event(&mut self, ctx: &mut Context, win_w: f32, win_h: f32) -> GameResult {
+        let scale_infos = self.get_screen_scale(ctx, Some((win_w, win_h)));
 
-    fn resize_event(&mut self, ctx: &mut Context, width: f32, height: f32) -> GameResult {
-        self.new_window_size = Some((width, height));
+        // To avoid unstable resize, we accept a small difference between w and h scales.
+        if (scale_infos.scale_w * 100.).floor() != (scale_infos.scale_h * 100.).floor() {
+            let scale = f32::min(scale_infos.scale_w, scale_infos.scale_h);
+            let (new_width, new_height) = (scale_infos.tot_w * scale, scale_infos.tot_h * scale);
+
+            if (new_width, new_height) != (scale_infos.win_w, scale_infos.win_h) {
+                /*
+                eprintln!(
+                    "{new_width},{new_height} | {},{} | {},{}",
+                    scale_infos.win_w,
+                    scale_infos.win_h,
+                    (scale_infos.scale_w * 100.).floor(),
+                    (scale_infos.scale_h * 100.).floor()
+                );
+                */
+
+                ctx.gfx.set_drawable_size(new_width, new_height)?;
+            }
+        }
 
         Ok(())
     }

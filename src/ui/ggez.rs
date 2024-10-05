@@ -63,7 +63,7 @@ struct State {
     /// When the player moved last (for animation)
     last_move_instant: Instant,
     /// New position of the moved crated if any (for animation)
-    moved_crate: Option<(isize, isize)>,
+    moved_crate: Option<(u32, u32)>,
 }
 
 struct ScaleInfos {
@@ -193,7 +193,7 @@ impl ggez::event::EventHandler<GameError> for State {
                 );
                 let params = DrawParam::default().dest(Vec2::new(x, y)).scale(scale_vec);
 
-                match self.board.get(i as isize, j as isize) {
+                match self.board.get(i, j) {
                     BoardElem(_, Void) => (),
                     BoardElem(_, Wall) => canvas.draw(&self.images.mur, params),
                     BoardElem(None, Floor) => canvas.draw(&rect, params),
@@ -223,7 +223,7 @@ impl ggez::event::EventHandler<GameError> for State {
                             MovableItem::Player => offset,
                             MovableItem::Crate(_) => self
                                 .moved_crate
-                                .filter(|(a, b)| (*a as usize, *b as usize) == (i, j))
+                                .filter(|(a, b)| (*a, *b) == (i, j))
                                 .map_or_else(|| Vec2::new(0., 0.), |_| offset),
                         };
 

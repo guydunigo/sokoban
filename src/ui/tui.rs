@@ -125,7 +125,7 @@ impl Ui for Tui {
     fn display(
         &self,
         board: &Board,
-        _last_move_result: Option<Option<(isize, isize)>>,
+        _last_move_result: Option<Option<(u32, u32)>>,
     ) -> Result<(), Box<dyn Error>> {
         let cols = u16::try_from(board.width()).map_err(|_| TuiError::MapTooLarge)?;
         let rows = u16::try_from(board.height()).map_err(|_| TuiError::MapTooLarge)?;
@@ -149,7 +149,7 @@ impl Ui for Tui {
                     use CellKind::*;
                     use MovableItem::*;
 
-                    let symbol = match board.get(i as isize, j as isize) {
+                    let symbol = match board.get(i.into(), j.into()) {
                         BoardElem(_, Void) => SYMBOL_VOID,
                         BoardElem(_, Wall) => SYMBOL_WALL,
                         BoardElem(None, Floor) => SYMBOL_FLOOR,

@@ -22,9 +22,9 @@ pub struct BoardElem<'a>(pub Option<MovableItem<'a>>, pub CellKind);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Board {
     map: Map,
-    player: (isize, isize),
+    player: (u32, u32),
     crates: Vec<Crate>,
-    original_player: (isize, isize),
+    original_player: (u32, u32),
     original_crates: Vec<Crate>,
 }
 
@@ -34,7 +34,7 @@ impl Board {
     }
 
     /*
-    pub fn try_get(&self, i: isize, j: isize) -> Option<BoardElem> {
+    pub fn try_get(&self, i: u32, j: u32) -> Option<BoardElem> {
         if let Some(c) = self.map.try_get(i, j) {
             if self.player == (i, j) {
                 Some(BoardElem(Some(MovableItem::Player), c))
@@ -49,7 +49,7 @@ impl Board {
     }
     */
 
-    pub fn get(&self, i: isize, j: isize) -> BoardElem {
+    pub fn get(&self, i: u32, j: u32) -> BoardElem {
         let c = self.map.get(i, j);
 
         if self.player == (i, j) {
@@ -96,7 +96,7 @@ impl Board {
     ///   coordinates of the crate,
     /// - `Some(None)` if it can move without pushing a crate,
     /// - `None` if it can't move at all, and the displayed map doesn't need change.
-    pub fn do_move_player(&mut self, dir: Direction) -> Option<Option<(isize, isize)>> {
+    pub fn do_move_player(&mut self, dir: Direction) -> Option<Option<(u32, u32)>> {
         if let Some(is_crate) = self.can_player_move(dir) {
             let (i, j) = dir.to_coords(self.player.0, self.player.1);
 
@@ -128,11 +128,11 @@ impl Board {
         }
     }
 
-    pub fn width(&self) -> usize {
+    pub fn width(&self) -> u32 {
         self.map.width()
     }
 
-    pub fn height(&self) -> usize {
+    pub fn height(&self) -> u32 {
         self.map.height()
     }
 
@@ -198,7 +198,7 @@ impl FromStr for Board {
 
             let mut player = player_line
                 .split(',')
-                .map(|n| isize::from_str(n).map_err(|_| err()));
+                .map(|n| u32::from_str(n).map_err(|_| err()));
 
             (
                 player.next().ok_or_else(err)??,
@@ -218,9 +218,7 @@ impl FromStr for Board {
                 // TODO: c'est moche...
                 let err = || LevelParseError::CantParseCrateCoordinates(String::from(line));
 
-                let mut c = line
-                    .split(',')
-                    .map(|n| isize::from_str(n).map_err(|_| err()));
+                let mut c = line.split(',').map(|n| u32::from_str(n).map_err(|_| err()));
 
                 crates.push(Crate::new(
                     c.next().ok_or_else(err)??,

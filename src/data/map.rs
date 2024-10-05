@@ -74,15 +74,17 @@ impl TryFrom<char> for CellKind {
 // TODO: check if board is consistant in itself...
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Map {
-    width: usize,
-    height: usize,
+    width: u32,
+    height: u32,
     squares: Vec<CellKind>,
 }
 
 impl fmt::Display for Map {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for i in 0..self.squares.len() {
-            if i > 0 && i % self.width == 0 {
+            if i > 0
+                && i % usize::try_from(self.width).expect("Map width should fit in a usize.") == 0
+            {
                 writeln!(f)?;
             }
             write!(f, "{}", self.squares[i])?;
@@ -93,8 +95,9 @@ impl fmt::Display for Map {
 
 impl Map {
     /// Creates a new board and fills it with [`CellKind::Void`].
-    pub fn new(width: usize, height: usize) -> Map {
-        let len = width * height;
+    pub fn new(width: u32, height: u32) -> Map {
+        let len =
+            usize::try_from(width * height).expect("Number of map squares should fit in usize.");
         let mut squares = Vec::with_capacity(len);
         squares.resize(len, CellKind::Void);
 
@@ -106,21 +109,22 @@ impl Map {
     }
 
     /// Width of board.
-    pub fn width(&self) -> usize {
+    pub fn width(&self) -> u32 {
         self.width
     }
 
     /// Height of board.
-    pub fn height(&self) -> usize {
+    pub fn height(&self) -> u32 {
         self.height
     }
 
     /// Try getting the content of square at column nb. i and row nb. j.
-    pub fn try_get(&self, i: isize, j: isize) -> Option<CellKind> {
-        // I don't like the conversion, but at the same time, if there's a conv problem,
-        // we're already dead in terms of memory space...
-        if i >= 0 && i < (self.width as isize) && j >= 0 && j < (self.height as isize) {
-            Some(self.squares[(j as usize) * self.width + (i as usize)])
+    pub fn try_get(&self, i: u32, j: u32) -> Option<CellKind> {
+        if i < self.width && j < self.height {
+            Some(
+                self.squares
+                    [usize::try_from(j * self.width + i).expect("Square id should fit in usize.")],
+            )
         } else {
             None
         }
@@ -128,7 +132,7 @@ impl Map {
 
     /// Same as [`try_get`] but directly returns a [`CellKind::Void`] if the coordinates don't
     /// actually fit in the board.
-    pub fn get(&self, i: isize, j: isize) -> CellKind {
+    pub fn get(&self, i: u32, j: u32) -> CellKind {
         self.try_get(i, j).unwrap_or(CellKind::Void)
     }
 }
@@ -150,7 +154,8 @@ impl TryFrom<&str> for Map {
 
         for (j, l) in src.lines().enumerate() {
             for (i, c) in l.chars().enumerate() {
-                b.squares[j * width + i] = CellKind::try_from(c)?;
+                b.squares[j * usize::try_from(width).expect("Width should fit in usize") + i] =
+                    CellKind::try_from(c)?;
             }
         }
         Ok(b)
@@ -167,14 +172,18 @@ impl FromStr for Map {
 }
 
 /// Counts how many lines and columns there is in the board representation.
-fn get_width_height(src: &str) -> (usize, usize) {
+fn get_width_height(src: &str) -> (u32, u32) {
     let height = src.lines().count();
     let width = src
         .lines()
         .map(|l| l.len())
         .max()
         .expect("Empty map while it should already be checked.");
-    (width, height)
+
+    (
+        width.try_into().expect("Width should fit in u32"),
+        height.try_into().expect("Height should fit in u32"),
+    )
 }
 
 // TODO: have a test map and check width, height, ...
@@ -193,8 +202,8 @@ mod tests {
 #...X..#
 ########";
 
-    const WIDTH: usize = 8;
-    const HEIGHT: usize = 9;
+    const WIDTH: u32 = 8;
+    const HEIGHT: u32 = 9;
 
     fn test_map() -> Map {
         Map {
@@ -258,8 +267,8 @@ mod tests {
         assert_eq!(map.get(1, 2), Target);
 
         // Outside range:
-        assert_eq!(map.try_get((WIDTH as isize) + 10, 1), None);
-        assert_eq!(map.get((WIDTH as isize) + 10, 1), Void);
+        assert_eq!(map.try_get(WIDTH + 10, 1), None);
+        assert_eq!(map.get(WIDTH + 10, 1), Void);
     }
 
     #[test]
@@ -279,7 +288,7 @@ mod tests {
         assert_eq!(map.get(1, 2), Target);
 
         // Outside range:
-        assert_eq!(map.try_get((WIDTH as isize) + 10, 1), None);
-        assert_eq!(map.get((WIDTH as isize) + 10, 1), Void);
+        assert_eq!(map.try_get(WIDTH + 10, 1), None);
+        assert_eq!(map.get(WIDTH + 10, 1), Void);
     }
 }

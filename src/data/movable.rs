@@ -12,33 +12,36 @@ pub enum Direction {
 }
 
 impl Direction {
-    pub fn to_coords(self, i: isize, j: isize) -> (isize, isize) {
+    pub fn to_coords(self, i: u32, j: u32) -> (u32, u32) {
         use Direction::*;
 
-        let delta = match self {
-            Left => (-1, 0),
-            Right => (1, 0),
-            Up => (0, -1),
-            Down => (0, 1),
+        let (mut res_i, mut res_j) = (i, j);
+
+        // Can't go below 0 :
+        match self {
+            Left => res_i = res_i.saturating_sub(1),
+            Right => res_i = res_i.saturating_add(1),
+            Up => res_j = res_j.saturating_sub(1),
+            Down => res_j = res_j.saturating_add(1),
         };
 
-        (i + delta.0, j + delta.1)
+        (res_i, res_j)
     }
 }
 
 /// Crate which can be pushed unless there is an *uncrossable* cell (see [`CellKind::is_crossable`]) or another crate in the way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Crate {
-    i: isize,
-    j: isize,
+    i: u32,
+    j: u32,
 }
 
 impl Crate {
-    pub fn new(i: isize, j: isize) -> Self {
+    pub fn new(i: u32, j: u32) -> Self {
         Crate { i, j }
     }
 
-    pub fn pos(&self) -> (isize, isize) {
+    pub fn pos(&self) -> (u32, u32) {
         (self.i, self.j)
     }
 

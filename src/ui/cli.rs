@@ -71,7 +71,7 @@ impl Ui for Cli {
     fn display(
         &self,
         board: &Board,
-        _last_move_result: Option<Option<(isize, isize)>>,
+        _last_move_result: Option<Option<(u32, u32)>>,
     ) -> Result<(), Box<dyn Error>> {
         let width = board.width();
         let height = board.height();
@@ -82,7 +82,7 @@ impl Ui for Cli {
 
                 print!(
                     "{}",
-                    match board.get(i as isize, j as isize) {
+                    match board.get(i, j) {
                         BoardElem(_, Void) => SYMBOL_VOID,
                         BoardElem(_, Wall) => SYMBOL_WALL,
                         BoardElem(None, Floor) => SYMBOL_FLOOR,

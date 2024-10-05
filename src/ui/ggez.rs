@@ -199,13 +199,13 @@ impl ggez::event::EventHandler<GameError> for State {
             }
         }
         canvas.draw(
-            Text::new(format!("fps : {}", ctx.time.fps() as i32)).set_scale(32.),
+            Text::new(format!("fps : {}", ctx.time.fps() as i32)).set_scale(15.),
             DrawParam::default().dest(Vec2::ZERO),
         );
 
         if self.board.has_won() {
-            let mut won_msg = Text::new("You won!\n(Press any key to quit...)");
-            won_msg.set_scale(32.);
+            let mut won_msg = Text::new("You won!\n(Press Escape key to quit...)");
+            won_msg.set_scale(21.);
             won_msg.set_layout(TextLayout {
                 h_align: TextAlign::Middle,
                 v_align: TextAlign::Begin,
@@ -229,7 +229,7 @@ impl ggez::event::EventHandler<GameError> for State {
                     ctx,
                     DrawMode::fill(),
                     rect,
-                    Color::from_rgba(150, 150, 0, 150),
+                    Color::from_rgba(150, 150, 0, 200),
                 )?;
                 canvas.draw(&won_box, DrawParam::default().dest(dest));
             }
@@ -250,23 +250,28 @@ impl ggez::event::EventHandler<GameError> for State {
 
     fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
         if let Some(keycode) = input.keycode {
-            match keycode {
-                KeyCode::Escape | KeyCode::Q => ctx.request_quit(),
-                KeyCode::R => self.board.reset(),
-                KeyCode::Left => self.do_move_player(Direction::Left),
-                KeyCode::Right => self.do_move_player(Direction::Right),
-                KeyCode::Up => self.do_move_player(Direction::Up),
-                KeyCode::Down => self.do_move_player(Direction::Down),
-                _ => (),
+            if self.board.has_won() && keycode == KeyCode::Escape {
+                ctx.request_quit();
+            } else {
+                match keycode {
+                    KeyCode::Escape | KeyCode::Q => ctx.request_quit(),
+                    KeyCode::R => self.board.reset(),
+                    KeyCode::Left => self.do_move_player(Direction::Left),
+                    KeyCode::Right => self.do_move_player(Direction::Right),
+                    KeyCode::Up => self.do_move_player(Direction::Up),
+                    KeyCode::Down => self.do_move_player(Direction::Down),
+                    _ => (),
+                }
             }
         }
         Ok(())
     }
+
     fn resize_event(&mut self, ctx: &mut Context, win_w: f32, win_h: f32) -> GameResult {
         let scale_infos = self.get_screen_scale(ctx, Some((win_w, win_h)));
 
         // To avoid unstable resize, we accept a small difference between w and h scales.
-        if (scale_infos.scale_w * 100.).floor() != (scale_infos.scale_h * 100.).floor() {
+        if (scale_infos.scale_w * 10.).floor() != (scale_infos.scale_h * 10.).floor() {
             let scale = f32::min(scale_infos.scale_w, scale_infos.scale_h);
             let (new_width, new_height) = (scale_infos.tot_w * scale, scale_infos.tot_h * scale);
 
@@ -276,8 +281,8 @@ impl ggez::event::EventHandler<GameError> for State {
                     "{new_width},{new_height} | {},{} | {},{}",
                     scale_infos.win_w,
                     scale_infos.win_h,
-                    (scale_infos.scale_w * 100.).floor(),
-                    (scale_infos.scale_h * 100.).floor()
+                    (scale_infos.scale_w * 10.).floor(),
+                    (scale_infos.scale_h * 10.).floor()
                 );
                 */
 

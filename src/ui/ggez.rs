@@ -2,7 +2,7 @@
 //!
 //! This version provides it's own event loop.
 
-use std::{env, path::PathBuf, str::FromStr};
+use std::{env, path::PathBuf, str::FromStr, time::Instant};
 
 use ggez::{
     conf::{Conf, WindowMode},
@@ -14,6 +14,8 @@ use ggez::{
 };
 
 use super::{Board, BoardElem, CellKind, Direction, MovableItem};
+
+const ANIMATION_DURATION_MILIS: u64 = 200;
 
 pub fn game_ggez(level: &str) -> GameResult {
     let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
@@ -58,6 +60,10 @@ struct State {
     images: Images,
     /// Direction indicating where the caracting is facing
     direction: Direction,
+    /// When the player moved last (for animation)
+    last_move_instant: Instant,
+    /// New position of the moved crated if any (for animation)
+    moved_crate: Option<(isize, isize)>,
 }
 
 struct ScaleInfos {
@@ -86,13 +92,24 @@ impl State {
                 objectif: graphics::Image::from_path(ctx, "/objectif.png")?,
             },
             direction: Direction::Down,
+            last_move_instant: Instant::now(),
+            moved_crate: None,
         };
 
         Ok(state)
     }
 
+    fn reset(&mut self) {
+        self.board.reset();
+        self.direction = Direction::Down;
+        self.last_move_instant = Instant::now();
+    }
+
     fn do_move_player(&mut self, dir: Direction) {
-        self.board.do_move_player(dir);
+        if let Some(moved) = self.board.do_move_player(dir) {
+            self.last_move_instant = Instant::now();
+            self.moved_crate = moved;
+        }
         self.direction = dir;
     }
 
@@ -143,10 +160,27 @@ impl ggez::event::EventHandler<GameError> for State {
         let scale = f32::min(scale_infos.scale_w, scale_infos.scale_h);
         let scale_vec = Vec2::new(scale, scale);
 
+        let (mario, offset) = {
+            let millis_since_last_move = Instant::now()
+                .duration_since(self.last_move_instant)
+                .as_millis() as f32;
+            let ratio_move = 1.
+                - f32::min(
+                    1.,
+                    millis_since_last_move / (ANIMATION_DURATION_MILIS as f32),
+                );
+
+            match self.direction {
+                Direction::Up => (&self.images.mario_haut, Vec2::new(0., -ratio_move)),
+                Direction::Down => (&self.images.mario_bas, Vec2::new(0., ratio_move)),
+                Direction::Left => (&self.images.mario_gauche, Vec2::new(-ratio_move, 0.)),
+                Direction::Right => (&self.images.mario_droite, Vec2::new(ratio_move, 0.)),
+            }
+        };
+
         for j in 0..self.board.height() {
             for i in 0..self.board.width() {
                 use CellKind::*;
-                use MovableItem::*;
 
                 if i % 2 == 0 {
                     // Best for pixel art as it doesn't make things blurry.
@@ -167,7 +201,7 @@ impl ggez::event::EventHandler<GameError> for State {
                         canvas.draw(&rect, params);
                         canvas.draw(&self.images.objectif, params);
                     }
-                    BoardElem(Some(Player), under) => {
+                    BoardElem(Some(movable), under) => {
                         match under {
                             Floor => canvas.draw(&rect, params),
                             Target => {
@@ -179,17 +213,21 @@ impl ggez::event::EventHandler<GameError> for State {
                             }
                         }
 
-                        let mario = match self.direction {
-                            Direction::Up => &self.images.mario_haut,
-                            Direction::Down => &self.images.mario_bas,
-                            Direction::Left => &self.images.mario_gauche,
-                            Direction::Right => &self.images.mario_droite,
+                        let image = match movable {
+                            MovableItem::Player => mario,
+                            MovableItem::Crate(_) if under == Target => &self.images.caisse_ok,
+                            MovableItem::Crate(_) => &self.images.caisse,
                         };
-                        canvas.draw(mario, params)
-                    }
-                    BoardElem(Some(Crate(_)), Floor) => canvas.draw(&self.images.caisse, params),
-                    BoardElem(Some(Crate(_)), Target) => {
-                        canvas.draw(&self.images.caisse_ok, params)
+
+                        let offset = match movable {
+                            MovableItem::Player => offset,
+                            MovableItem::Crate(_) => self
+                                .moved_crate
+                                .filter(|(a, b)| (*a as usize, *b as usize) == (i, j))
+                                .map_or_else(|| Vec2::new(0., 0.), |_| offset),
+                        };
+
+                        canvas.draw(image, params.z(10).offset(offset));
                     }
                 }
 
@@ -213,6 +251,8 @@ impl ggez::event::EventHandler<GameError> for State {
 
             let dest = Vec2::from(ctx.gfx.size()) / 2.;
 
+            let params = DrawParam::default().dest(dest).z(10);
+
             {
                 let dimensions = won_msg
                     .dimensions(ctx)
@@ -231,15 +271,12 @@ impl ggez::event::EventHandler<GameError> for State {
                     rect,
                     Color::from_rgba(150, 150, 0, 200),
                 )?;
-                canvas.draw(&won_box, DrawParam::default().dest(dest));
+                canvas.draw(&won_box, params);
             }
 
             canvas.draw(
                 &won_msg,
-                DrawParam::default()
-                    .dest(dest)
-                    .offset(Vec2::new(0., 0.5))
-                    .color(Color::BLACK),
+                params.offset(Vec2::new(0., 0.5)).color(Color::BLACK),
             );
         }
 
@@ -257,7 +294,7 @@ impl ggez::event::EventHandler<GameError> for State {
             } else {
                 match keycode {
                     KeyCode::Escape | KeyCode::Q => ctx.request_quit(),
-                    KeyCode::R => self.board.reset(),
+                    KeyCode::R => self.reset(),
                     KeyCode::Left => self.do_move_player(Direction::Left),
                     KeyCode::Right => self.do_move_player(Direction::Right),
                     KeyCode::Up => self.do_move_player(Direction::Up),
@@ -282,7 +319,7 @@ impl ggez::event::EventHandler<GameError> for State {
         } else {
             match btn {
                 Button::Start => ctx.request_quit(),
-                Button::West => self.board.reset(),
+                Button::West => self.reset(),
                 Button::DPadLeft => self.do_move_player(Direction::Left),
                 Button::DPadRight => self.do_move_player(Direction::Right),
                 Button::DPadUp => self.do_move_player(Direction::Up),

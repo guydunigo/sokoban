@@ -6,7 +6,7 @@ use std::{env, path::PathBuf, str::FromStr};
 
 use ggez::{
     conf::{Conf, WindowMode},
-    event,
+    event::{self, Button, GamepadId},
     glam::Vec2,
     graphics::{self, Color, DrawMode, DrawParam, Drawable, Rect, Text, TextAlign, TextLayout},
     input::keyboard::{KeyCode, KeyInput},
@@ -250,8 +250,10 @@ impl ggez::event::EventHandler<GameError> for State {
 
     fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
         if let Some(keycode) = input.keycode {
-            if self.board.has_won() && keycode == KeyCode::Escape {
-                ctx.request_quit();
+            if self.board.has_won() {
+                if keycode == KeyCode::Escape {
+                    ctx.request_quit();
+                }
             } else {
                 match keycode {
                     KeyCode::Escape | KeyCode::Q => ctx.request_quit(),
@@ -262,6 +264,30 @@ impl ggez::event::EventHandler<GameError> for State {
                     KeyCode::Down => self.do_move_player(Direction::Down),
                     _ => (),
                 }
+            }
+        }
+        Ok(())
+    }
+
+    fn gamepad_button_down_event(
+        &mut self,
+        ctx: &mut Context,
+        btn: Button,
+        _id: GamepadId,
+    ) -> GameResult {
+        if self.board.has_won() {
+            if btn == Button::Start {
+                ctx.request_quit();
+            }
+        } else {
+            match btn {
+                Button::Start => ctx.request_quit(),
+                Button::West => self.board.reset(),
+                Button::DPadLeft => self.do_move_player(Direction::Left),
+                Button::DPadRight => self.do_move_player(Direction::Right),
+                Button::DPadUp => self.do_move_player(Direction::Up),
+                Button::DPadDown => self.do_move_player(Direction::Down),
+                _ => (),
             }
         }
         Ok(())

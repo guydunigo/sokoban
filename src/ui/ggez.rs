@@ -64,6 +64,7 @@ struct State {
     last_move_instant: Instant,
     /// New position of the moved crated if any (for animation)
     moved_crate: Option<(u32, u32)>,
+    shader: graphics::Shader,
 }
 
 struct ScaleInfos {
@@ -94,6 +95,9 @@ impl State {
             direction: Direction::Down,
             last_move_instant: Instant::now(),
             moved_crate: None,
+            shader: graphics::ShaderBuilder::new()
+                .fragment_path("/rand_noise_shader.wgsl")
+                .build(&ctx.gfx)?,
         };
 
         Ok(state)
@@ -146,9 +150,9 @@ impl ggez::event::EventHandler<GameError> for State {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
-
         let scale_infos = self.get_screen_scale(ctx, None);
+
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
 
         let rect = graphics::Mesh::new_rectangle(
             ctx,
@@ -179,6 +183,11 @@ impl ggez::event::EventHandler<GameError> for State {
         };
 
         for j in 0..self.board.height() {
+            if j % 2 == 0 {
+                canvas.set_shader(&self.shader);
+            } else {
+                canvas.set_default_shader();
+            }
             for i in 0..self.board.width() {
                 use CellKind::*;
 
@@ -236,6 +245,8 @@ impl ggez::event::EventHandler<GameError> for State {
                 }
             }
         }
+        canvas.set_default_shader();
+
         canvas.draw(
             Text::new(format!("fps : {}", ctx.time.fps() as i32)).set_scale(15.),
             DrawParam::default().dest(Vec2::ZERO),

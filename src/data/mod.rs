@@ -29,10 +29,6 @@ pub struct Board {
 }
 
 impl Board {
-    fn map(&self) -> &Map {
-        &self.map
-    }
-
     /*
     pub fn try_get(&self, i: u32, j: u32) -> Option<BoardElem> {
         if let Some(c) = self.map.try_get(i, j) {

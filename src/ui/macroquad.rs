@@ -10,8 +10,6 @@ use super::{Board, BoardElem, CellKind, Direction, MovableItem};
 
 const ANIMATION_DURATION_MILIS: u64 = 200;
 
-// TODO: gestion des erreurs
-
 // Normally through a macro for main.
 pub fn game_macroquad(level: &str) {
     Window::from_config(
@@ -26,12 +24,13 @@ pub fn game_macroquad(level: &str) {
 async fn game_macroquad_async(level: String) {
     let mut state = State::new(level).await.unwrap();
 
+    state.draw().unwrap();
     loop {
         state.resize_window_if_needed();
-        state.draw().unwrap();
         if state.manage_input_and_should_quit() {
             break;
         }
+        state.draw().unwrap();
         next_frame().await
     }
 }
@@ -85,7 +84,6 @@ impl State {
                 mario_haut: load_texture("images/mario_haut.gif").await?,
                 mur: load_texture("images/mur.jpg").await?,
                 objectif: load_texture("images/objectif.png").await?,
-                // TODO: set_filter(FilterMode::Nearest)
             },
             direction: Direction::Down,
             last_move_instant: Instant::now(),
@@ -147,19 +145,51 @@ impl State {
             let millis_since_last_move = Instant::now()
                 .duration_since(self.last_move_instant)
                 .as_millis() as f32;
-            let ratio_move = 1.
-                - f32::min(
-                    1.,
-                    millis_since_last_move / (ANIMATION_DURATION_MILIS as f32),
-                );
+            let ratio_move = scale
+                * (1.
+                    - f32::min(
+                        1.,
+                        millis_since_last_move / (ANIMATION_DURATION_MILIS as f32),
+                    ));
 
             match self.direction {
-                Direction::Up => (&self.images.mario_haut, (0., -ratio_move)),
-                Direction::Down => (&self.images.mario_bas, (0., ratio_move)),
-                Direction::Left => (&self.images.mario_gauche, (-ratio_move, 0.)),
-                Direction::Right => (&self.images.mario_droite, (ratio_move, 0.)),
+                Direction::Up => (
+                    &self.images.mario_haut,
+                    (0., ratio_move * self.images.mur.height()),
+                ),
+                Direction::Down => (
+                    &self.images.mario_bas,
+                    (0., -ratio_move * self.images.mur.height()),
+                ),
+                Direction::Left => (
+                    &self.images.mario_gauche,
+                    (ratio_move * self.images.mur.width(), 0.),
+                ),
+                Direction::Right => (
+                    &self.images.mario_droite,
+                    (-ratio_move * self.images.mur.width(), 0.),
+                ),
             }
         };
+
+        // Apparently can't set it per draw (whole image has same texture parameter).
+        {
+            let filter = match self.direction {
+                // Best for pixel art as it doesn't make things blurry.
+                Direction::Up | Direction::Down => FilterMode::Nearest,
+                Direction::Left | Direction::Right => FilterMode::Linear,
+            };
+            self.images.caisse.set_filter(filter);
+            self.images.caisse_ok.set_filter(filter);
+            self.images.mario_bas.set_filter(filter);
+            self.images.mario_droite.set_filter(filter);
+            self.images.mario_gauche.set_filter(filter);
+            self.images.mario_haut.set_filter(filter);
+            self.images.mur.set_filter(filter);
+            self.images.objectif.set_filter(filter);
+        }
+
+        let mut foreground = [None, None];
 
         for j in 0..self.board.height() {
             // TODO: if j % 2 == 0 {
@@ -169,11 +199,6 @@ impl State {
             // TODO: }
             for i in 0..self.board.width() {
                 use CellKind::*;
-
-                // TODO: if i % 2 == 0 {
-                // TODO:     // Best for pixel art as it doesn't make things blurry.
-                // TODO:     canvas.set_sampler(graphics::Sampler::nearest_clamp());
-                // TODO: }
 
                 let (x, y) = (
                     i as f32 * scale_infos.img_w * scale,
@@ -243,15 +268,24 @@ impl State {
                                 .map_or((0., 0.), |_| offset),
                         };
 
-                        draw_texture_ex(image, x + offset_x, y + offset_y, WHITE, params);
+                        let index = match movable {
+                            MovableItem::Player => 0,
+                            MovableItem::Crate(_) => 1,
+                        };
+
+                        foreground[index] = Some((image, x + offset_x, y + offset_y, params));
                     }
                 }
-
-                // TODO: if i % 2 == 0 {
-                // TODO:     canvas.set_default_sampler();
-                // TODO: }
             }
         }
+
+        if let Some((image, x, y, params)) = foreground[0].take() {
+            draw_texture_ex(image, x, y, WHITE, params);
+        }
+        if let Some((image, x, y, params)) = foreground[1].take() {
+            draw_texture_ex(image, x, y, WHITE, params);
+        }
+
         // TODO: canvas.set_default_shader();
 
         {
@@ -280,7 +314,7 @@ impl State {
             );
 
             draw_text(
-                &won_msg_1,
+                won_msg_1,
                 (scale_infos.win_w - won_msg_1_measure.width) / 2.,
                 scale_infos.win_h / 2. - margin - won_msg_1_measure.height
                     + won_msg_1_measure.offset_y,
@@ -288,7 +322,7 @@ impl State {
                 BLACK,
             );
             draw_text(
-                &won_msg_2,
+                won_msg_2,
                 (scale_infos.win_w - won_msg_2_measure.width) / 2.,
                 scale_infos.win_h / 2. + margin + won_msg_2_measure.offset_y,
                 21.,

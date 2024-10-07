@@ -65,7 +65,7 @@ impl Crate {
 
     /// If it is on a [`CellKind::Target`].
     pub fn is_placed(&self, board: &Board) -> bool {
-        matches!(board.map().get(self.i, self.j), CellKind::Target)
+        matches!(board.map.get(self.i, self.j), CellKind::Target)
     }
 }
 

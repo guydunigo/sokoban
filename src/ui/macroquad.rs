@@ -57,7 +57,7 @@ struct State {
     last_move_instant: Instant,
     /// New position of the moved crated if any (for animation)
     moved_crate: Option<(u32, u32)>,
-    // shader: graphics::Shader,
+    // shader: Material,
 }
 
 struct ScaleInfos {
@@ -88,10 +88,13 @@ impl State {
             direction: Direction::Down,
             last_move_instant: Instant::now(),
             moved_crate: None,
-            // TODO: shader
-            // shader: graphics::ShaderBuilder::new()
-            //     .fragment_path("/rand_noise_shader.wgsl")
-            //     .build(&ctx.gfx)?,
+            // shader: load_material(
+            //     ShaderSource::Glsl {
+            //         fragment: MY_FRAGMENT_SHADER,
+            //         vertex: DEFAULT_VERTEX_SHADER,
+            //     },
+            //     Default::default(),
+            // )?,
         };
 
         Ok(state)
@@ -192,11 +195,12 @@ impl State {
         let mut foreground = [None, None];
 
         for j in 0..self.board.height() {
-            // TODO: if j % 2 == 0 {
-            // TODO:     canvas.set_shader(&self.shader);
-            // TODO: } else {
-            // TODO:     canvas.set_default_shader();
-            // TODO: }
+            // TODO: fix shader removing alpha
+            // if j % 2 == 0 {
+            //     gl_use_material(&self.shader);
+            // } else {
+            //     gl_use_default_material();
+            // }
             for i in 0..self.board.width() {
                 use CellKind::*;
 
@@ -286,7 +290,7 @@ impl State {
             draw_texture_ex(image, x, y, WHITE, params);
         }
 
-        // TODO: canvas.set_default_shader();
+        // gl_use_default_material();
 
         {
             let fps_msg = format!("fps : {}", get_fps() as i32);
@@ -381,6 +385,35 @@ impl State {
         }
     }
 }
+
+// const MY_FRAGMENT_SHADER: &'static str = "#version 100
+// precision lowp float;
+//
+// varying vec2 uv;
+//
+// uniform sampler2D Texture;
+//
+// void main() {
+//     gl_FragColor = texture2D(Texture, uv);
+// }
+// ";
+//
+// const DEFAULT_VERTEX_SHADER: &'static str = "#version 100
+// precision lowp float;
+//
+// attribute vec3 position;
+// attribute vec2 texcoord;
+//
+// varying vec2 uv;
+//
+// uniform mat4 Model;
+// uniform mat4 Projection;
+//
+// void main() {
+//     gl_Position = Projection * Model * vec4(position, 1);
+//     uv = texcoord;
+// }
+// ";
 
 #[cfg(test)]
 mod tests {

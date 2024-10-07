@@ -24,10 +24,14 @@ pub fn game_macroquad(level: &str) {
 }
 
 async fn game_macroquad_async(level: String) {
-    let state = State::new(level).await.unwrap();
+    let mut state = State::new(level).await.unwrap();
 
     loop {
+        state.resize_window_if_needed();
         state.draw().unwrap();
+        if state.manage_input_and_should_quit() {
+            break;
+        }
         next_frame().await
     }
 }
@@ -112,11 +116,11 @@ impl State {
     /// Calculates scale based on new window size.
     ///
     /// `win_resize` can contain the new size of the window, otherwise we get it from ctx.
-    fn get_screen_scale(&self, win_resize: Option<(f32, f32)>) -> ScaleInfos {
+    fn get_screen_scale(&self) -> ScaleInfos {
         let (img_w, img_h) = (self.images.mur.width(), self.images.mur.height());
 
         let (board_w, board_h) = (self.board.width() as f32, self.board.height() as f32);
-        let (win_w, win_h) = win_resize.unwrap_or_else(|| (screen_width(), screen_height()));
+        let (win_w, win_h) = (screen_width(), screen_height());
         let (tot_w, tot_h) = (board_w * img_w, board_h * img_h);
         let (scale_w, scale_h) = (win_w / tot_w, win_h / tot_h);
 
@@ -133,7 +137,7 @@ impl State {
     }
 
     pub fn draw(&self) -> Result<(), Box<dyn Error>> {
-        let scale_infos = self.get_screen_scale(None);
+        let scale_infos = self.get_screen_scale();
 
         clear_background(BLACK);
 
@@ -250,13 +254,11 @@ impl State {
         }
         // TODO: canvas.set_default_shader();
 
-        draw_text(
-            &format!("fps : {}", get_fps() as i32)[..],
-            10.,
-            10.,
-            21.,
-            WHITE,
-        );
+        {
+            let fps_msg = format!("fps : {}", get_fps() as i32);
+            let fps_dim = measure_text(&fps_msg[..], None, 21, 1.);
+            draw_text(&fps_msg[..], 0., fps_dim.offset_y, 21., WHITE);
+        }
 
         if self.board.has_won() {
             let won_msg_1 = "You won!";
@@ -267,28 +269,28 @@ impl State {
             let won_msg_w = f32::max(won_msg_1_measure.width, won_msg_2_measure.width);
             let won_msg_h = won_msg_1_measure.height + won_msg_2_measure.height;
 
-            let margin = won_msg_h * 0.1;
+            let margin = won_msg_h * 0.2;
 
-            // TODO: Color::from_rgba(150, 150, 0, 200),
             draw_rectangle(
-                (scale_infos.win_w - won_msg_w - margin) / 2.,
-                (scale_infos.win_h - won_msg_h - margin) / 2.,
-                won_msg_w + margin,
-                won_msg_h + margin,
-                WHITE,
+                (scale_infos.win_w - won_msg_w) / 2. - margin * 2.,
+                (scale_infos.win_h - won_msg_h) / 2. - margin * 4.,
+                won_msg_w + margin * 4.,
+                won_msg_h + margin * 8.,
+                Color::from_rgba(150, 150, 0, 200),
             );
 
             draw_text(
                 &won_msg_1,
-                (scale_infos.win_w - won_msg_1_measure.width - margin) / 2.,
-                (scale_infos.win_h - won_msg_h - margin) / 2. - won_msg_1_measure.height,
+                (scale_infos.win_w - won_msg_1_measure.width) / 2.,
+                scale_infos.win_h / 2. - margin - won_msg_1_measure.height
+                    + won_msg_1_measure.offset_y,
                 21.,
                 BLACK,
             );
             draw_text(
                 &won_msg_2,
-                (scale_infos.win_w - won_msg_2_measure.width - margin) / 2.,
-                (scale_infos.win_h - won_msg_h - margin) / 2. - won_msg_2_measure.height,
+                (scale_infos.win_w - won_msg_2_measure.width) / 2.,
+                scale_infos.win_h / 2. + margin + won_msg_2_measure.offset_y,
                 21.,
                 BLACK,
             );
@@ -297,58 +299,53 @@ impl State {
         Ok(())
     }
 
-    // TODO
-    /*
-    fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
-        if let Some(keycode) = input.keycode {
-            if self.board.has_won() {
-                if keycode == KeyCode::Escape {
-                    ctx.request_quit();
-                }
-            } else {
-                match keycode {
-                    KeyCode::Escape | KeyCode::Q => ctx.request_quit(),
-                    KeyCode::R => self.reset(),
-                    KeyCode::Left => self.do_move_player(Direction::Left),
-                    KeyCode::Right => self.do_move_player(Direction::Right),
-                    KeyCode::Up => self.do_move_player(Direction::Up),
-                    KeyCode::Down => self.do_move_player(Direction::Down),
-                    _ => (),
-                }
+    /// Returns `true` if it should quit.
+    pub fn manage_input_and_should_quit(&mut self) -> bool {
+        if self.board.has_won() {
+            is_key_pressed(KeyCode::Escape)
+        } else {
+            if is_key_pressed(KeyCode::R) {
+                self.reset();
             }
+            if is_key_pressed(KeyCode::Left) {
+                self.do_move_player(Direction::Left);
+            }
+            if is_key_pressed(KeyCode::Right) {
+                self.do_move_player(Direction::Right);
+            }
+            if is_key_pressed(KeyCode::Up) {
+                self.do_move_player(Direction::Up);
+            }
+            if is_key_pressed(KeyCode::Down) {
+                self.do_move_player(Direction::Down);
+            }
+            is_key_pressed(KeyCode::Escape) || is_key_pressed(KeyCode::Q)
         }
-        Ok(())
     }
-    */
 
-    /*
-        // TODO
-        fn resize_event(&mut self, ctx: &mut Context, win_w: f32, win_h: f32) -> GameResult {
-            let scale_infos = self.get_screen_scale(ctx, Some((win_w, win_h)));
+    fn resize_window_if_needed(&mut self) {
+        let scale_infos = self.get_screen_scale();
 
-            // To avoid unstable resize, we accept a small difference between w and h scales.
-            if (scale_infos.scale_w * 10.).floor() != (scale_infos.scale_h * 10.).floor() {
-                let scale = f32::min(scale_infos.scale_w, scale_infos.scale_h);
-                let (new_width, new_height) = (scale_infos.tot_w * scale, scale_infos.tot_h * scale);
+        // To avoid unstable resize, we accept a small difference between w and h scales.
+        if (scale_infos.scale_w * 10.).floor() != (scale_infos.scale_h * 10.).floor() {
+            let scale = f32::min(scale_infos.scale_w, scale_infos.scale_h);
+            let (new_width, new_height) = (scale_infos.tot_w * scale, scale_infos.tot_h * scale);
 
-                if (new_width, new_height) != (scale_infos.win_w, scale_infos.win_h) {
-                    /*
-                    eprintln!(
-                        "{new_width},{new_height} | {},{} | {},{}",
-                        scale_infos.win_w,
-                        scale_infos.win_h,
-                        (scale_infos.scale_w * 10.).floor(),
-                        (scale_infos.scale_h * 10.).floor()
-                    );
-                    */
+            if (new_width, new_height) != (scale_infos.win_w, scale_infos.win_h) {
+                /*
+                eprintln!(
+                    "{new_width},{new_height} | {},{} | {},{}",
+                    scale_infos.win_w,
+                    scale_infos.win_h,
+                    (scale_infos.scale_w * 10.).floor(),
+                    (scale_infos.scale_h * 10.).floor()
+                );
+                */
 
-                    ctx.gfx.set_drawable_size(new_width, new_height)?;
-                }
+                request_new_screen_size(new_width, new_height);
             }
-
-            Ok(())
         }
-    */
+    }
 }
 
 #[cfg(test)]

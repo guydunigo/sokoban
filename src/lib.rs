@@ -7,7 +7,7 @@ mod data;
 use data::{Board, LevelParseError};
 mod ui;
 use ui::Action;
-pub use ui::{game_ggez, DisplayKind, Ui};
+pub use ui::{game_ggez, game_macroquad, DisplayKind, Ui};
 
 #[derive(Debug)]
 pub enum GameError {

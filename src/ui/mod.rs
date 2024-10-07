@@ -9,6 +9,8 @@ mod tui;
 use tui::Tui;
 mod ggez;
 pub use ggez::game_ggez;
+mod macroquad;
+pub use macroquad::game_macroquad;
 // mod gui;
 // use gui::Gui;
 

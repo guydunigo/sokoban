@@ -128,7 +128,7 @@ impl State {
             .expect("Can't get dimensions of wall picture !");
 
         let (board_w, board_h) = (self.board.width() as f32, self.board.height() as f32);
-        let (win_w, win_h) = win_resize.unwrap_or(ctx.gfx.size());
+        let (win_w, win_h) = win_resize.unwrap_or_else(|| ctx.gfx.size());
         let (tot_w, tot_h) = (board_w * dimensions.w, board_h * dimensions.h);
         let (scale_w, scale_h) = (win_w / tot_w, win_h / tot_h);
 

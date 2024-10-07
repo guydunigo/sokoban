@@ -21,8 +21,10 @@ fn main() {
     //     Err(err) => eprintln!("Game exited with following error :\n{}", err),
     // }
 
-    match sokoban::game_ggez(&level[..]) {
-        Ok(()) => (),
-        Err(err) => eprintln!("Game exited with following error :\n{}", err),
-    }
+    // match sokoban::game_ggez(&level[..]) {
+    //     Ok(()) => (),
+    //     Err(err) => eprintln!("Game exited with following error :\n{}", err),
+    // }
+
+    sokoban::game_macroquad(&level[..]);
 }

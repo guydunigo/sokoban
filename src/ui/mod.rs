@@ -5,11 +5,17 @@ use super::data::{Board, BoardElem, CellKind, Direction, MovableItem};
 mod cli;
 mod terminal;
 use cli::Cli;
+#[cfg(feature = "tui")]
 mod tui;
+#[cfg(feature = "tui")]
 use tui::Tui;
+#[cfg(feature = "ggez")]
 mod ggez;
+#[cfg(feature = "ggez")]
 pub use ggez::game_ggez;
+#[cfg(feature = "macroquad")]
 mod macroquad;
+#[cfg(feature = "macroquad")]
 pub use macroquad::game_macroquad;
 // mod gui;
 // use gui::Gui;
@@ -19,6 +25,7 @@ pub use macroquad::game_macroquad;
 pub enum DisplayKind {
     /// Basic terminal prompt.
     CLI,
+    #[cfg(feature = "tui")]
     /// Dynamic terminal display.
     TUI,
     // /// 2D graphics.
@@ -75,6 +82,7 @@ pub fn new(kind: DisplayKind) -> Result<Box<dyn Ui>, Box<dyn Error>> {
 
     Ok(match kind {
         CLI => Box::new(Cli::initialize()?),
+        #[cfg(feature = "tui")]
         TUI => Box::new(Tui::initialize()?),
         // GUI -> Box::new(Gui::new()),
     })

@@ -7,9 +7,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-crossterm = "0.28.1"
-ggez = "0.9.3"
-macroquad = "0.4.13"
+bevy = { version = "0.14.2", optional = true }
+crossterm = { version = "0.28.1", optional = true }
+ggez = { version = "0.9.3", optional = true }
+macroquad = { version = "0.4.13", optional = true }
 
-# [profile.dev.package."*"]
-# opt-level = 3
+[profile.dev.package."*"]
+opt-level = 3
+
+[features]
+default = ["bevy"]
+tui = ["crossterm"]
+# Although macroquad doesn't have features, a dependency of ggez must enable Jpeg support,
+# that macroquad crash on by itself.
+macroquad = ["ggez", "dep:macroquad"]

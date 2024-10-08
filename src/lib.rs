@@ -6,8 +6,12 @@ use std::{error::Error, fmt, str::FromStr};
 mod data;
 use data::{Board, LevelParseError};
 mod ui;
+#[cfg(feature = "ggez")]
+pub use ui::game_ggez;
+#[cfg(feature = "macroquad")]
+pub use ui::game_macroquad;
 use ui::Action;
-pub use ui::{game_ggez, game_macroquad, DisplayKind, Ui};
+pub use ui::{DisplayKind, Ui};
 
 #[derive(Debug)]
 pub enum GameError {

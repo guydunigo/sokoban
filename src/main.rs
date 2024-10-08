@@ -16,15 +16,29 @@ fn main() {
         }
     };
 
-    // match sokoban::game(sokoban::DisplayKind::TUI, &level[..]) {
-    //     Ok(()) => (),
-    //     Err(err) => eprintln!("Game exited with following error :\n{}", err),
-    // }
+    #[cfg(not(any(
+        feature = "tui",
+        feature = "ggez",
+        feature = "macroquad",
+        feature = "bevy"
+    )))]
+    match sokoban::game(sokoban::DisplayKind::CLI, &level[..]) {
+        Ok(()) => (),
+        Err(err) => eprintln!("Game exited with following error :\n{}", err),
+    }
 
-    // match sokoban::game_ggez(&level[..]) {
-    //     Ok(()) => (),
-    //     Err(err) => eprintln!("Game exited with following error :\n{}", err),
-    // }
+    #[cfg(feature = "tui")]
+    match sokoban::game(sokoban::DisplayKind::TUI, &level[..]) {
+        Ok(()) => (),
+        Err(err) => eprintln!("Game exited with following error :\n{}", err),
+    }
 
+    #[cfg(all(feature = "ggez", not(feature = "macroquad")))]
+    match sokoban::game_ggez(&level[..]) {
+        Ok(()) => (),
+        Err(err) => eprintln!("Game exited with following error :\n{}", err),
+    }
+
+    #[cfg(feature = "macroquad")]
     sokoban::game_macroquad(&level[..]);
 }

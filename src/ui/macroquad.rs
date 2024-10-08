@@ -277,7 +277,11 @@ impl State {
                             MovableItem::Crate(_) => 1,
                         };
 
-                        foreground[index] = Some((image, x + offset_x, y + offset_y, params));
+                        if (offset_x, offset_y) != (0., 0.) {
+                            foreground[index] = Some((image, x + offset_x, y + offset_y, params));
+                        } else {
+                            draw_texture_ex(image, x + offset_x, y + offset_y, WHITE, params);
+                        }
                     }
                 }
             }

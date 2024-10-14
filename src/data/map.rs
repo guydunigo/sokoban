@@ -2,15 +2,23 @@
 
 use std::{convert::TryFrom, fmt, str::FromStr};
 
+#[cfg(feature = "fyrox")]
+use fyrox_core::{
+    reflect::{FieldInfo, Reflect},
+    visitor::{Visit, VisitResult, Visitor},
+};
+
 const SYMBOL_VOID: char = ' ';
 const SYMBOL_FLOOR: char = '.';
 const SYMBOL_WALL: char = '#';
 const SYMBOL_TARGET: char = 'X';
 
 /// When representing the map, each square can have one of these types.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "fyrox", derive(Visit, Reflect))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum CellKind {
     /// The square is empty and shouldn't be accessible to the player.
+    #[default]
     Void,
     /// The square is a floor that can be walked upon.
     Floor,
@@ -28,15 +36,6 @@ impl CellKind {
         !matches!(self, Void | Wall)
     }
 }
-
-/*
-impl Default for CellKind {
-    /// Default is [`CellKind::Void`].
-    fn default() -> Self {
-        CellKind::Void
-    }
-}
-*/
 
 impl fmt::Display for CellKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -72,6 +71,7 @@ impl TryFrom<char> for CellKind {
 
 /// Represents the map on which boxes and player will move.
 // TODO: check if board is consistant in itself...
+#[cfg_attr(feature = "fyrox", derive(Visit, Reflect, Default))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Map {
     width: u32,

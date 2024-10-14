@@ -92,7 +92,7 @@ impl State {
                 mur: graphics::Image::from_path(ctx, "/mur.jpg")?,
                 objectif: graphics::Image::from_path(ctx, "/objectif.png")?,
             },
-            direction: Direction::Down,
+            direction: Default::default(),
             last_move_instant: Instant::now(),
             moved_crate: None,
             shader: graphics::ShaderBuilder::new()

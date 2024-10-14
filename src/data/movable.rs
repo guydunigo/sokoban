@@ -2,12 +2,20 @@
 
 use super::{Board, BoardElem, CellKind};
 
+#[cfg(feature = "fyrox")]
+use fyrox_core::{
+    reflect::{FieldInfo, Reflect},
+    visitor::{Visit, VisitResult, Visitor},
+};
+
 /// Direction a [`Movable`] can be moved.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "fyrox", derive(Visit, Reflect))]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     Left,
     Right,
     Up,
+    #[default]
     Down,
 }
 
@@ -30,6 +38,7 @@ impl Direction {
 }
 
 /// Crate which can be pushed unless there is an *uncrossable* cell (see [`CellKind::is_crossable`]) or another crate in the way.
+#[cfg_attr(feature = "fyrox", derive(Visit, Reflect, Default))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Crate {
     i: u32,

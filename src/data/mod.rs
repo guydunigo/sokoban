@@ -8,6 +8,12 @@ pub use map::{CellKind, Map};
 mod movable;
 pub use movable::{Crate, Direction};
 
+#[cfg(feature = "fyrox")]
+use fyrox_core::{
+    reflect::{FieldInfo, Reflect},
+    visitor::{Visit, VisitResult, Visitor},
+};
+
 /// Item maybe found on top of a cell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MovableItem<'a> {
@@ -19,6 +25,7 @@ pub struct BoardElem<'a>(pub Option<MovableItem<'a>>, pub CellKind);
 
 /// The [`Board`] contains the [`Map`], the items ([crates](`Crate`) and the [player](`Player`)) on
 /// top.
+#[cfg_attr(feature = "fyrox", derive(Default, Reflect))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Board {
     map: Map,
@@ -26,6 +33,25 @@ pub struct Board {
     crates: Vec<Crate>,
     original_player: (u32, u32),
     original_crates: Vec<Crate>,
+}
+
+#[cfg(feature = "fyrox")]
+impl Visit for Board {
+    fn visit(&mut self, name: &str, visitor: &mut Visitor) -> VisitResult {
+        let mut region = visitor.enter_region(name)?;
+        self.map.visit("Map", &mut region)?;
+        self.player.0.visit("Player0", &mut region)?;
+        self.player.1.visit("Player1", &mut region)?;
+        self.crates.visit("Crates", &mut region)?;
+        self.original_player
+            .0
+            .visit("OriginalPlayer0", &mut region)?;
+        self.original_player
+            .1
+            .visit("OriginalPlayer1", &mut region)?;
+        self.original_crates.visit("OriginalCrates", &mut region)?;
+        Ok(())
+    }
 }
 
 impl Board {

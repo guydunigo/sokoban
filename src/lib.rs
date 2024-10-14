@@ -4,7 +4,8 @@
 use std::{error::Error, fmt, str::FromStr};
 
 mod data;
-use data::{Board, LevelParseError};
+use data::LevelParseError;
+pub use data::{Board, Direction};
 mod ui;
 #[cfg(feature = "ggez")]
 pub use ui::game_ggez;

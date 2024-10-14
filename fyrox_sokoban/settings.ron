@@ -471,11 +471,23 @@
     scene_settings: {
         "data/scene.rgs": (
             camera_settings: (
-                position: (0.0, 1.0, 0.0),
+                position: (0.0, 0.0, -3.0),
                 yaw: 0.0,
                 pitch: 0.0,
             ),
             node_infos: {
+                (
+                    index: 45,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 2,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
                 (
                     index: 1,
                     generation: 1,
@@ -483,7 +495,7 @@
                     is_expanded: true,
                 ),
                 (
-                    index: 2,
+                    index: 0,
                     generation: 1,
                 ): (
                     is_expanded: true,
@@ -498,7 +510,7 @@
     ),
     windows: (
         window_position: (0.0, 0.0),
-        window_size: (1356.0, 741.0),
+        window_size: (1920.0, 1008.0),
         layout: None,
     ),
 )

@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 fyrox = {workspace = true}
+sokoban = {path= "../../", default-features = false, features = ["fyrox"]}
 
 [features]
 default = ["fyrox/default"]

@@ -18,7 +18,7 @@ opt-level = 3
 
 [features]
 # default = ["bevy"]
-default = []
+default = ["ggez"]
 tui = ["crossterm"]
 # Although macroquad doesn't have features, a dependency of ggez must enable Jpeg support,
 # that macroquad crash on by itself.

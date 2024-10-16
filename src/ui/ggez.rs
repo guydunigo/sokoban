@@ -202,42 +202,34 @@ impl ggez::event::EventHandler<GameError> for State {
                 );
                 let params = DrawParam::default().dest(Vec2::new(x, y)).scale(scale_vec);
 
-                match self.board.get(i, j) {
-                    BoardElem(_, Void) => (),
-                    BoardElem(_, Wall) => canvas.draw(&self.images.mur, params),
-                    BoardElem(None, Floor) => canvas.draw(&rect, params),
-                    BoardElem(None, Target) => {
+                let BoardElem(movable, under) = self.board.get(i, j);
+
+                match under {
+                    Void => (),
+                    Wall => canvas.draw(&self.images.mur, params),
+                    Floor => canvas.draw(&rect, params),
+                    Target => {
                         canvas.draw(&rect, params);
                         canvas.draw(&self.images.objectif, params);
                     }
-                    BoardElem(Some(movable), under) => {
-                        match under {
-                            Floor => canvas.draw(&rect, params),
-                            Target => {
-                                canvas.draw(&rect, params);
-                                canvas.draw(&self.images.objectif, params);
-                            }
-                            Void | Wall => {
-                                unreachable!("Mario can neither go on a wall or on the void.")
-                            }
-                        }
+                }
 
-                        let image = match movable {
-                            MovableItem::Player => mario,
-                            MovableItem::Crate(_) if under == Target => &self.images.caisse_ok,
-                            MovableItem::Crate(_) => &self.images.caisse,
-                        };
+                if let Some(movable) = movable {
+                    let image = match movable {
+                        MovableItem::Player => mario,
+                        MovableItem::Crate(_) if under == Target => &self.images.caisse_ok,
+                        MovableItem::Crate(_) => &self.images.caisse,
+                    };
 
-                        let offset = match movable {
-                            MovableItem::Player => offset,
-                            MovableItem::Crate(_) => self
-                                .moved_crate
-                                .filter(|(a, b)| (*a, *b) == (i, j))
-                                .map_or_else(|| Vec2::new(0., 0.), |_| offset),
-                        };
+                    let offset = match movable {
+                        MovableItem::Player => offset,
+                        MovableItem::Crate(_) => self
+                            .moved_crate
+                            .filter(|(a, b)| (*a, *b) == (i, j))
+                            .map_or_else(|| Vec2::new(0., 0.), |_| offset),
+                    };
 
-                        canvas.draw(image, params.z(10).offset(offset));
-                    }
+                    canvas.draw(image, params.z(10).offset(offset));
                 }
 
                 if i % 2 == 0 {

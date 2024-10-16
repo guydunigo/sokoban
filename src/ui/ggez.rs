@@ -209,6 +209,7 @@ impl ggez::event::EventHandler<GameError> for State {
                     Wall => canvas.draw(&self.images.mur, params),
                     Floor => canvas.draw(&rect, params),
                     Target => {
+                        // TODO: il serait mieux d'enlever la transparence avec la couleur du sol ?
                         canvas.draw(&rect, params);
                         canvas.draw(&self.images.objectif, params);
                     }

@@ -473,7 +473,7 @@
             camera_settings: (
                 position: (0.0, 0.0, -3.0),
                 yaw: 0.0,
-                pitch: 0.0,
+                pitch: -0.01,
             ),
             node_infos: {
                 (
@@ -484,6 +484,18 @@
                 ),
                 (
                     index: 2,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 45,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 43,
                     generation: 1,
                 ): (
                     is_expanded: true,
@@ -502,18 +514,6 @@
                 ),
                 (
                     index: 44,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 45,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 43,
                     generation: 1,
                 ): (
                     is_expanded: true,

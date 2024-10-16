@@ -1,19 +1,15 @@
 //! Game project.
 use fyrox::{
-    asset::{untyped::ResourceKind, Resource},
-    core::{
-        algebra::Vector3, color::Color, pool::Handle, reflect::prelude::*, visitor::prelude::*,
-    },
+    asset::untyped::ResourceKind,
+    core::{algebra::Vector3, pool::Handle, reflect::prelude::*, visitor::prelude::*},
     event::Event,
     gui::message::UiMessage,
     material::{Material, MaterialResource},
     plugin::{Plugin, PluginContext, PluginRegistrationContext},
-    resource::texture::Texture,
     scene::{
         base::BaseBuilder,
-        camera::{CameraBuilder, OrthographicProjection, Projection},
-        dim2::rectangle::{Rectangle, RectangleBuilder},
-        node::Node,
+        camera::{CameraBuilder, OrthographicProjection, Projection, SkyBox},
+        dim2::rectangle::RectangleBuilder,
         transform::TransformBuilder,
         Scene,
     },
@@ -28,14 +24,45 @@ pub use fyrox;
 
 #[derive(Default, Visit, Reflect, Debug)]
 struct Images {
-    caisse: Resource<Texture>,
-    caisse_ok: Resource<Texture>,
-    mario_bas: Resource<Texture>,
-    mario_droite: Resource<Texture>,
-    mario_gauche: Resource<Texture>,
-    mario_haut: Resource<Texture>,
-    mur: Resource<Texture>,
-    objectif: Resource<Texture>,
+    caisse: MaterialResource,
+    caisse_ok: MaterialResource,
+    mario_bas: MaterialResource,
+    mario_droite: MaterialResource,
+    mario_gauche: MaterialResource,
+    mario_haut: MaterialResource,
+    mur: MaterialResource,
+    sol: MaterialResource,
+    objectif: MaterialResource,
+}
+
+impl Images {
+    fn load_material(context: &PluginContext, path: impl AsRef<Path>) -> MaterialResource {
+        let texture_resource = context.resource_manager.request(path);
+
+        let mut material = Material::standard_2d();
+        material
+            .set_texture(&"diffuseTexture".into(), Some(texture_resource))
+            .unwrap();
+
+        // TODO: Texture::set_magnification_filter(TextureMagnificationFilter::Nearest);
+        // TODO: Texture::set_mignification_filter(TextureMagnificationFilter::Nearest);
+
+        MaterialResource::new_ok(ResourceKind::Embedded, material)
+    }
+
+    pub fn load(context: &PluginContext) -> Self {
+        Images {
+            caisse: Self::load_material(context, "data/images/caisse.jpg"),
+            caisse_ok: Self::load_material(context, "data/images/caisse_ok.jpg"),
+            mario_bas: Self::load_material(context, "data/images/mario_bas.gif"),
+            mario_droite: Self::load_material(context, "data/images/mario_droite.gif"),
+            mario_gauche: Self::load_material(context, "data/images/mario_gauche.gif"),
+            mario_haut: Self::load_material(context, "data/images/mario_haut.gif"),
+            mur: Self::load_material(context, "data/images/mur.jpg"),
+            sol: Default::default(),
+            objectif: Self::load_material(context, "data/images/objectif.png"),
+        }
+    }
 }
 
 #[derive(Default, Visit, Reflect, Debug)]
@@ -54,6 +81,21 @@ pub struct Game {
     images: Option<Images>,
     board: LoadingState,
     direction: Direction,
+}
+
+impl Game {
+    fn draw_texture(scene: &mut Scene, material: MaterialResource, i: u32, j: u32) {
+        let base_builder = BaseBuilder::new().with_local_transform(
+            TransformBuilder::new()
+                // Size of the rectangle is defined only by scale.
+                .with_local_position(Vector3::new(i as f32, j as f32, 0.))
+                .build(),
+        );
+
+        RectangleBuilder::new(base_builder)
+            .with_material(material)
+            .build(&mut scene.graph);
+    }
 }
 
 impl Plugin for Game {
@@ -77,29 +119,8 @@ impl Plugin for Game {
             Board::from_str(&level[..]).expect("Failed to load level !")
         };
 
-        let images = Images {
-            caisse: context.resource_manager.request("data/images/caisse.jpg"),
-            caisse_ok: context
-                .resource_manager
-                .request("data/images/caisse_ok.jpg"),
-            mario_bas: context
-                .resource_manager
-                .request("data/images/mario_bas.gif"),
-            mario_droite: context
-                .resource_manager
-                .request("data/images/mario_droite.gif"),
-            mario_gauche: context
-                .resource_manager
-                .request("data/images/mario_gauche.gif"),
-            mario_haut: context
-                .resource_manager
-                .request("data/images/mario_haut.gif"),
-            mur: context.resource_manager.request("data/images/mur.jpg"),
-            objectif: context.resource_manager.request("data/images/objectif.png"),
-        };
-
         self.board = LoadingState::WaitingScene(board);
-        self.images = Some(images);
+        self.images = Some(Images::load(&context));
     }
 
     fn on_deinit(&mut self, _context: PluginContext) {
@@ -140,59 +161,45 @@ impl Plugin for Game {
             panic!("Should be in loading state WaitingScene with a loaded board !");
         };
 
-        let (width, height) = (board.width() as f32, board.height() as f32);
+        let (width, height) = (board.width(), board.height());
 
-        // TODO: change projection params (see defaults) ?
-        // https://docs.rs/fyrox-impl/0.34.1/src/fyrox_impl/scene/camera.rs.html#112
+        // TODO: inverser la camera pour pouvoir utiliser des coordonnées positives ?
         CameraBuilder::new(
             BaseBuilder::new().with_local_transform(
                 TransformBuilder::new()
-                    .with_local_position(Vector3::new((width - 1.) / 2., (height - 1.) / 2., -5.))
+                    .with_local_position(Vector3::new(
+                        ((width as f32) - 1.) / 2.,
+                        ((height as f32) - 1.) / 2.,
+                        -5.,
+                    ))
                     .build(),
             ),
         )
         .with_projection(Projection::Orthographic(OrthographicProjection {
-            vertical_size: height / 2.,
+            vertical_size: (height as f32) / 2.,
             ..Default::default()
         }))
+        .with_skybox(SkyBox::default())
         .build(&mut scene.graph);
 
         let images = self.images.as_ref().expect("Images should be loaded.");
 
-        // TODO: direct dans image
-        // TODO: pixel art
-        let mut material = Material::standard_2d();
-        material
-            .set_texture(&"diffuseTexture".into(), Some(images.caisse.clone()))
-            .unwrap();
-        let material_resource = MaterialResource::new_ok(ResourceKind::Embedded, material);
-
-        for j in 0..board.height() {
-            for i in 0..board.width() {
-                let base_builder = BaseBuilder::new().with_local_transform(
-                    TransformBuilder::new()
-                        // Size of the rectangle is defined only by scale.
-                        .with_local_position(Vector3::new(i as f32, j as f32, 0.))
-                        .build(),
-                );
-                RectangleBuilder::new(base_builder)
-                    .with_color(Color::WHITE)
-                    .with_material(material_resource.clone())
-                    .build(&mut scene.graph);
-
-                /*
+        for j in 0..height {
+            for i in 0..width {
                 use CellKind::*;
                 match board.get(i, j) {
                     BoardElem(_, Void) => (),
-                    BoardElem(_, Wall) => canvas.draw(&images.mur, params),
-                    BoardElem(_, Floor) => canvas.draw(&rect, params),
+                    BoardElem(_, Wall) => Self::draw_texture(scene, images.mur.clone(), i, j),
+                    BoardElem(_, Floor) => Self::draw_texture(scene, images.sol.clone(), i, j),
                     BoardElem(_, Target) => {
-                        canvas.draw(&rect, params);
-                        canvas.draw(&self.images.objectif, params);
+                        // TODO: il serait mieux d'enlever la transparence avec la couleur du sol ?
+                        Self::draw_texture(scene, images.sol.clone(), i, j);
+                        Self::draw_texture(scene, images.objectif.clone(), i, j);
                     }
                 }
-                */
             }
         }
+
+        // TODO: register players and crates
     }
 }

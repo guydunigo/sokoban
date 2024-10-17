@@ -1,7 +1,12 @@
 //! Game project.
 use fyrox::{
     asset::untyped::ResourceKind,
-    core::{algebra::Vector3, pool::Handle, reflect::prelude::*, visitor::prelude::*},
+    core::{
+        algebra::{Quaternion, UnitQuaternion, Vector3, Vector4},
+        pool::Handle,
+        reflect::prelude::*,
+        visitor::prelude::*,
+    },
     event::Event,
     gui::message::UiMessage,
     material::{Material, MaterialResource},
@@ -163,7 +168,6 @@ impl Plugin for Game {
 
         let (width, height) = (board.width(), board.height());
 
-        // TODO: inverser la camera pour pouvoir utiliser des coordonnées positives ?
         CameraBuilder::new(
             BaseBuilder::new().with_local_transform(
                 TransformBuilder::new()
@@ -171,6 +175,11 @@ impl Plugin for Game {
                         ((width as f32) - 1.) / 2.,
                         ((height as f32) - 1.) / 2.,
                         -5.,
+                    ))
+                    .with_local_rotation(UnitQuaternion::from_euler_angles(
+                        0.,
+                        0.,
+                        std::f32::consts::PI,
                     ))
                     .build(),
             ),

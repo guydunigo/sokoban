@@ -125,7 +125,7 @@ impl Ui for Tui {
     fn display(
         &self,
         board: &Board,
-        _last_move_result: Option<Option<(u32, u32)>>,
+        _last_move_result: Option<Option<usize>>,
     ) -> Result<(), Box<dyn Error>> {
         let cols = u16::try_from(board.width()).map_err(|_| TuiError::MapTooLarge)?;
         let rows = u16::try_from(board.height()).map_err(|_| TuiError::MapTooLarge)?;

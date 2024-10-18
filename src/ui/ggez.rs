@@ -112,7 +112,7 @@ impl State {
     fn do_move_player(&mut self, dir: Direction) {
         if let Some(moved) = self.board.do_move_player(dir) {
             self.last_move_instant = Instant::now();
-            self.moved_crate = moved;
+            self.moved_crate = moved.map(|i| self.board.crates()[i].pos());
         }
         self.direction = dir;
     }

@@ -14,14 +14,14 @@ use fyrox_core::{
     visitor::{Visit, VisitResult, Visitor},
 };
 
+pub struct BoardElem(pub Option<MovableItem>, pub CellKind);
+
 /// Item maybe found on top of a cell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MovableItem<'a> {
+pub enum MovableItem {
     Player,
-    Crate(&'a Crate),
+    Crate(usize),
 }
-
-pub struct BoardElem<'a>(pub Option<MovableItem<'a>>, pub CellKind);
 
 /// The [`Board`] contains the [`Map`], the items ([crates](`Crate`) and the [player](`Player`)) on
 /// top.
@@ -76,8 +76,14 @@ impl Board {
 
         if self.player == (i, j) {
             BoardElem(Some(MovableItem::Player), c)
-        } else if let Some(b) = self.crates.iter().find(|c| c.pos() == (i, j)) {
-            BoardElem(Some(MovableItem::Crate(b)), c)
+        } else if let Some(i) = self
+            .crates
+            .iter()
+            .enumerate()
+            .find(|(_, c)| c.pos() == (i, j))
+            .map(|(i, _)| i)
+        {
+            BoardElem(Some(MovableItem::Crate(i)), c)
         } else {
             BoardElem(None, c)
         }
@@ -91,71 +97,47 @@ impl Board {
         &self.crates[..]
     }
 
-    /// The player can move unless there is an *uncrossable* cell (see [`CellKind::is_crossable`]) or an unmovable crate in the way.
-    /// If there is a crate which can be moved in the same direction, it will (see
-    /// [`Crate::can_move`]).
-    ///
-    /// Returns:
-    /// - `Some(true)` if it can move by pushing a crate,
-    /// - `Some(false)` if it can move without pushing a crate,
-    /// - `None` if it can't move at all.
-    pub fn can_player_move(self: &Board, dir: Direction) -> Option<bool> {
-        let (i, j) = dir.to_coords(self.player.0, self.player.1);
-        match self.get(i, j) {
-            BoardElem(Some(MovableItem::Crate(c)), _) => {
-                if c.can_move(self, dir) {
-                    Some(true)
-                } else {
-                    None
-                }
-            }
-            BoardElem(Some(MovableItem::Player), _) => unreachable!(), // at least for now...
-            BoardElem(None, c) => {
-                if c.is_crossable() {
-                    Some(false)
-                } else {
-                    None
-                }
-            }
-        }
-    }
-
     /// Actually moves if it can move and returns `true`, or `false` if it couldn't move.
     /// Returns:
-    /// - `Some(Some((i,j)))` if it can move by pushing a crate, with (i,j) being the new
-    ///   coordinates of the crate,
-    /// - `Some(None)` if it can move without pushing a crate,
+    /// - `Some(Some(crate_index))` : the player moved and it moved the crate `board.crates()[crate_index]`
+    /// - `Some(None)` : the player moved, but it moved no crate
     /// - `None` if it can't move at all, and the displayed map doesn't need change.
-    pub fn do_move_player(&mut self, dir: Direction) -> Option<Option<(u32, u32)>> {
-        if let Some(is_crate) = self.can_player_move(dir) {
-            let (i, j) = dir.to_coords(self.player.0, self.player.1);
+    pub fn do_move_player(&mut self, dir: Direction) -> Option<Option<usize>> {
+        let new_player = dir.to_coords(self.player.0, self.player.1);
+        let under = self.map.get(new_player.0, new_player.1);
 
-            // If there's a crate to be pushed, move it first:
-            let c_opt = if is_crate {
-                let c = self.crates.iter_mut().find(|c| c.pos() == (i, j)).expect(
-                    "It was annouced that the player would push a crate, but there isn't any.",
-                );
-                c.do_move(dir);
+        let (is_crate_blocking, moved_crate) = if let Some(index) = self
+            .crates
+            .iter()
+            .enumerate()
+            .find(|(_, c)| c.pos() == (new_player.0, new_player.1))
+            .map(|(i, _)| i)
+        {
+            let new_crate = dir.to_coords(new_player.0, new_player.1);
 
-                /*
-                // TODO: no need to re-check here ?
-                if c.can_move(self, dir) {
-                    c.do_move(dir);
-                } else {
-                    unreachable!("Crate can't move but it should already have been checked.");
-                }
-                */
-
-                Some(c.pos())
+            if self.map.get(new_crate.0, new_crate.1).is_crossable()
+                && self
+                    .crates
+                    .iter()
+                    .find(|c| c.pos() == (new_crate.0, new_crate.1))
+                    .is_none()
+            {
+                self.crates[index].do_move(new_crate.0, new_crate.1);
+                (false, Some(index))
             } else {
-                None
-            };
-
-            self.player = (i, j);
-            Some(c_opt)
+                (true, None)
+            }
         } else {
-            None
+            (false, None)
+        };
+
+        if !under.is_crossable() || is_crate_blocking {
+            return None;
         }
+
+        self.player = new_player;
+
+        Some(moved_crate)
     }
 
     pub fn width(&self) -> u32 {

@@ -16,14 +16,14 @@ use fyrox::{
     scene::{
         base::BaseBuilder,
         camera::{CameraBuilder, OrthographicProjection, Projection, SkyBox},
-        dim2::rectangle::RectangleBuilder,
+        dim2::rectangle::{Rectangle, RectangleBuilder},
         graph::Graph,
         node::Node,
         transform::TransformBuilder,
         Scene,
     },
 };
-use sokoban::{Board, BoardElem, CellKind, Direction, MovableItem};
+use sokoban::{Board, BoardElem, CellKind, Crate, Direction};
 use std::{env::args, fs::read_to_string, mem, path::Path, str::FromStr};
 
 const DEFAULT_LEVEL_FILENAME: &str = "../map.txt";
@@ -45,8 +45,8 @@ fn material_for_player(images: &Images, direction: Direction) -> MaterialResourc
     }
 }
 
-fn material_for_crate(images: &Images, under: CellKind) -> MaterialResource {
-    if under == CellKind::Target {
+fn material_for_crate(images: &Images, board: &Board, this_crate: &Crate) -> MaterialResource {
+    if this_crate.is_placed(board) {
         images.caisse_ok.clone()
     } else {
         images.caisse.clone()
@@ -110,11 +110,12 @@ impl Images {
 }
 
 #[derive(Default, Visit, Reflect, Debug)]
-pub enum LoadingState {
+enum LoadingState {
     #[default]
     None,
-    WaitingScene(Board),
+    WaitingScene(Board, Images),
     SceneFilled {
+        images: Images,
         board: Board,
         scene: Handle<Scene>,
         player: Handle<Node>,
@@ -125,15 +126,22 @@ pub enum LoadingState {
 impl LoadingState {
     fn unwrap_scene_filled(
         &mut self,
-    ) -> (&mut Board, &Handle<Scene>, &Handle<Node>, &[Handle<Node>]) {
+    ) -> (
+        &Images,
+        &mut Board,
+        &Handle<Scene>,
+        &Handle<Node>,
+        &[Handle<Node>],
+    ) {
         if let LoadingState::SceneFilled {
+            images,
             board,
             scene,
             player,
             crates,
         } = self
         {
-            (board, scene, player, &crates[..])
+            (images, board, scene, player, &crates[..])
         } else {
             panic!("Game should be in LoadingStata::SceneFilled with all the board loaded into the scene !");
         }
@@ -142,7 +150,6 @@ impl LoadingState {
 
 #[derive(Default, Visit, Reflect, Debug)]
 pub struct Game {
-    images: Option<Images>,
     board: LoadingState,
     direction: Direction,
 }
@@ -169,7 +176,7 @@ impl Game {
     }
 
     fn reset(&mut self, context: &mut PluginContext) {
-        let (board, scene, player, crates) = self.board.unwrap_scene_filled();
+        let (_, board, scene, player, crates) = self.board.unwrap_scene_filled();
         board.reset();
         self.direction = Direction::Down;
         let mut graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
@@ -192,12 +199,29 @@ impl Game {
     }
 
     fn do_move_player(&mut self, context: &mut PluginContext, dir: Direction) {
-        let (board, scene, player, _) = self.board.unwrap_scene_filled();
-        if let Some(moved) = board.do_move_player(dir) {
-            let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
+        let (images, board, scene, player, crates) = self.board.unwrap_scene_filled();
+
+        let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
+        graph[*player]
+            .cast_mut::<Rectangle>()
+            .unwrap()
+            .material_mut()
+            .set_value_and_mark_modified(material_for_player(images, dir));
+
+        if let Some(moved_crate_index) = board.do_move_player(dir) {
             Self::update_node_pos(graph, *player, board.player());
-            if let Some(moved) = moved {
-                Self::update_node_pos(graph, *moved_crate, moved);
+
+            if let Some(moved_crate_index) = moved_crate_index {
+                let moved_crate = board.crates()[moved_crate_index];
+                let crate_rect = crates[moved_crate_index];
+
+                Self::update_node_pos(graph, crates[moved_crate_index], moved_crate.pos());
+
+                graph[crate_rect]
+                    .cast_mut::<Rectangle>()
+                    .unwrap()
+                    .material_mut()
+                    .set_value_and_mark_modified(material_for_crate(images, board, &moved_crate));
             }
         }
         self.direction = dir;
@@ -225,8 +249,7 @@ impl Plugin for Game {
             Board::from_str(&level[..]).expect("Failed to load level !")
         };
 
-        self.board = LoadingState::WaitingScene(board);
-        self.images = Some(Images::load(&mut context));
+        self.board = LoadingState::WaitingScene(board, Images::load(&mut context));
     }
 
     fn on_deinit(&mut self, _context: PluginContext) {
@@ -235,7 +258,6 @@ impl Plugin for Game {
 
     fn update(&mut self, _context: &mut PluginContext) {
         // Add your global update code here.
-        // self.board.unwrap().player
     }
 
     fn on_os_event(&mut self, event: &Event<()>, mut context: PluginContext) {
@@ -247,10 +269,18 @@ impl Plugin for Game {
                         Key::Named(NamedKey::Escape) => context.window_target.unwrap().exit(),
                         Key::Character(val) if val == "q" => context.window_target.unwrap().exit(),
                         Key::Character(val) if val == "r" => self.reset(&mut context),
-                        Key::Named(NamedKey::ArrowLeft) => self.do_move_player(Direction::Left),
-                        Key::Named(NamedKey::ArrowRight) => self.do_move_player(Direction::Right),
-                        Key::Named(NamedKey::ArrowUp) => self.do_move_player(Direction::Up),
-                        Key::Named(NamedKey::ArrowDown) => self.do_move_player(Direction::Down),
+                        Key::Named(NamedKey::ArrowLeft) => {
+                            self.do_move_player(&mut context, Direction::Left)
+                        }
+                        Key::Named(NamedKey::ArrowRight) => {
+                            self.do_move_player(&mut context, Direction::Right)
+                        }
+                        Key::Named(NamedKey::ArrowUp) => {
+                            self.do_move_player(&mut context, Direction::Up)
+                        }
+                        Key::Named(NamedKey::ArrowDown) => {
+                            self.do_move_player(&mut context, Direction::Down)
+                        }
                         _ => (),
                     }
                 }
@@ -280,8 +310,8 @@ impl Plugin for Game {
         let scene = context.scenes.try_get_mut(scene_h).unwrap();
 
         // TODO: mem::take ugly ?
-        let LoadingState::WaitingScene(board) = mem::take(&mut self.board) else {
-            panic!("Should be in loading state WaitingScene with a loaded board !");
+        let LoadingState::WaitingScene(board, images) = mem::take(&mut self.board) else {
+            panic!("Should be in loading state WaitingScene with a loaded board and images !");
         };
 
         let (width, height) = (board.width(), board.height());
@@ -305,25 +335,30 @@ impl Plugin for Game {
         .with_skybox(SkyBox::default())
         .build(&mut scene.graph);
 
-        let images = self.images.as_ref().expect("Images should be loaded.");
-
-        let mut crates = Vec::with_capacity(board.crates().len());
-
         let player = {
             let (i, j) = board.player();
             Self::create_rectangle(
                 scene,
-                material_for_player(images, self.direction),
+                material_for_player(&images, self.direction),
                 i,
                 j,
                 -0.,
             )
         };
 
+        let crates = board
+            .crates()
+            .iter()
+            .map(|c| {
+                let (i, j) = c.pos();
+                Self::create_rectangle(scene, material_for_crate(&images, &board, c), i, j, 0.)
+            })
+            .collect();
+
         for j in 0..height {
             for i in 0..width {
                 use CellKind::*;
-                let BoardElem(movable, under) = board.get(i, j);
+                let BoardElem(_, under) = board.get(i, j);
                 match under {
                     Void => (),
                     Wall => {
@@ -338,21 +373,11 @@ impl Plugin for Game {
                         Self::create_rectangle(scene, images.objectif.clone(), i, j, 0.);
                     }
                 }
-
-                if let Some(MovableItem::Crate(caisse)) = movable {
-                    let (i, j) = caisse.pos();
-                    crates.push(Self::create_rectangle(
-                        scene,
-                        material_for_crate(images, under),
-                        i,
-                        j,
-                        0.,
-                    ));
-                }
             }
         }
 
         self.board = LoadingState::SceneFilled {
+            images,
             board,
             scene: scene_h,
             player,

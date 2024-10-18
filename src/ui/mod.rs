@@ -70,7 +70,7 @@ pub trait Ui {
     fn display(
         &self,
         board: &Board,
-        last_move_result: Option<Option<(u32, u32)>>,
+        last_move_result: Option<Option<usize>>,
     ) -> Result<(), Box<dyn Error>>;
 
     /// The game is won and will quit the game when this function returns.

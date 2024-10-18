@@ -1,6 +1,6 @@
 //! Objects which can be moved on the board.
 
-use super::{Board, BoardElem, CellKind};
+use super::{Board, CellKind};
 
 #[cfg(feature = "fyrox")]
 use fyrox_core::{
@@ -54,20 +54,8 @@ impl Crate {
         (self.i, self.j)
     }
 
-    /// Can move if there's nothing on the cell and if the cell is
-    /// [crossable](`CellKind::is_crossable`).
-    pub fn can_move(&self, board: &Board, dir: Direction) -> bool {
-        let (i, j) = dir.to_coords(self.i, self.j);
-        match board.get(i, j) {
-            BoardElem(Some(_), _) => false,
-            BoardElem(None, c) => c.is_crossable(),
-        }
-    }
-
-    /// Actually change the coordinates of the crates, but you'd better ensure it can be moved
-    /// (using [`Crate::can_move`]).
-    pub fn do_move(&mut self, dir: Direction) {
-        let (i, j) = dir.to_coords(self.i, self.j);
+    /// Actually change the coordinates, make sure they are valid.
+    pub fn do_move(&mut self, i: u32, j: u32) {
         self.i = i;
         self.j = j;
     }

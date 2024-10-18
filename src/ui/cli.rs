@@ -71,7 +71,7 @@ impl Ui for Cli {
     fn display(
         &self,
         board: &Board,
-        _last_move_result: Option<Option<(u32, u32)>>,
+        _last_move_result: Option<Option<usize>>,
     ) -> Result<(), Box<dyn Error>> {
         let width = board.width();
         let height = board.height();

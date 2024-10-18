@@ -1,8 +1,9 @@
 //! Game project.
 use fyrox::{
-    asset::untyped::ResourceKind,
+    asset::{untyped::ResourceKind, Resource},
     core::{
-        algebra::{Quaternion, UnitQuaternion, Vector3, Vector4},
+        algebra::{UnitQuaternion, Vector3},
+        futures::TryFutureExt,
         pool::Handle,
         reflect::prelude::*,
         visitor::prelude::*,
@@ -11,21 +12,47 @@ use fyrox::{
     gui::message::UiMessage,
     material::{Material, MaterialResource},
     plugin::{Plugin, PluginContext, PluginRegistrationContext},
+    resource::texture::{
+        Texture, TextureImportOptions, TextureMagnificationFilter, TextureMinificationFilter,
+    },
     scene::{
         base::BaseBuilder,
         camera::{CameraBuilder, OrthographicProjection, Projection, SkyBox},
         dim2::rectangle::RectangleBuilder,
+        node::Node,
         transform::TransformBuilder,
         Scene,
     },
 };
-use sokoban::{Board, BoardElem, CellKind, Direction};
-use std::{env::args, fs::read_to_string, path::Path, str::FromStr};
+use sokoban::{Board, BoardElem, CellKind, Direction, MovableItem};
+use std::{env::args, fs::read_to_string, mem, path::Path, str::FromStr};
 
 const DEFAULT_LEVEL_FILENAME: &str = "../map.txt";
 
 // Re-export the engine.
 pub use fyrox;
+
+fn rotation() -> UnitQuaternion<f32> {
+    UnitQuaternion::from_euler_angles(0., 0., std::f32::consts::PI)
+}
+
+fn material_for_player(images: &Images, direction: Direction) -> MaterialResource {
+    use Direction::*;
+    match direction {
+        Up => images.mario_haut.clone(),
+        Down => images.mario_bas.clone(),
+        Left => images.mario_gauche.clone(),
+        Right => images.mario_droite.clone(),
+    }
+}
+
+fn material_for_crate(images: &Images, under: CellKind) -> MaterialResource {
+    if under == CellKind::Target {
+        images.caisse_ok.clone()
+    } else {
+        images.caisse.clone()
+    }
+}
 
 #[derive(Default, Visit, Reflect, Debug)]
 struct Images {
@@ -42,15 +69,18 @@ struct Images {
 
 impl Images {
     fn load_material(context: &PluginContext, path: impl AsRef<Path>) -> MaterialResource {
-        let texture_resource = context.resource_manager.request(path);
+        // TODO: can't seem to load with TextureImportOptions directly...
+        // TODO: spawn an async task to wait on texture and set those options ?
+        // let texture_options = TextureImportOptions::default()
+        //     .with_magnification_filter(TextureMagnificationFilter::Nearest)
+        //     .with_minification_filter(TextureMinificationFilter::Nearest);
+
+        let texture_resource: Resource<Texture> = context.resource_manager.request(path);
 
         let mut material = Material::standard_2d();
         material
             .set_texture(&"diffuseTexture".into(), Some(texture_resource))
             .unwrap();
-
-        // TODO: Texture::set_magnification_filter(TextureMagnificationFilter::Nearest);
-        // TODO: Texture::set_mignification_filter(TextureMagnificationFilter::Nearest);
 
         MaterialResource::new_ok(ResourceKind::Embedded, material)
     }
@@ -78,7 +108,27 @@ pub enum LoadingState {
     SceneFilled {
         board: Board,
         scene: Handle<Scene>,
+        player: Handle<Node>,
+        crates: Vec<Handle<Node>>,
     },
+}
+
+impl LoadingState {
+    fn unwrap_scene_filled(
+        &mut self,
+    ) -> (&mut Board, &Handle<Scene>, &Handle<Node>, &[Handle<Node>]) {
+        if let LoadingState::SceneFilled {
+            board,
+            scene,
+            player,
+            crates,
+        } = self
+        {
+            (board, scene, player, &crates[..])
+        } else {
+            panic!("Game should be in LoadingStata::SceneFilled with all the board loaded into the scene !");
+        }
+    }
 }
 
 #[derive(Default, Visit, Reflect, Debug)]
@@ -89,17 +139,24 @@ pub struct Game {
 }
 
 impl Game {
-    fn draw_texture(scene: &mut Scene, material: MaterialResource, i: u32, j: u32) {
+    fn draw_texture(
+        scene: &mut Scene,
+        material: MaterialResource,
+        i: u32,
+        j: u32,
+        z: f32,
+    ) -> Handle<Node> {
         let base_builder = BaseBuilder::new().with_local_transform(
             TransformBuilder::new()
                 // Size of the rectangle is defined only by scale.
-                .with_local_position(Vector3::new(i as f32, j as f32, 0.))
+                .with_local_position(Vector3::new(i as f32, j as f32, z))
+                .with_local_rotation(rotation())
                 .build(),
         );
 
         RectangleBuilder::new(base_builder)
             .with_material(material)
-            .build(&mut scene.graph);
+            .build(&mut scene.graph)
     }
 }
 
@@ -156,13 +213,14 @@ impl Plugin for Game {
     fn on_scene_loaded(
         &mut self,
         _path: &Path,
-        scene: Handle<Scene>,
+        scene_h: Handle<Scene>,
         _data: &[u8],
         context: &mut PluginContext,
     ) {
-        let scene = context.scenes.try_get_mut(scene).unwrap();
+        let scene = context.scenes.try_get_mut(scene_h).unwrap();
 
-        let LoadingState::WaitingScene(ref board) = self.board else {
+        // TODO: mem::take ugly ?
+        let LoadingState::WaitingScene(board) = mem::take(&mut self.board) else {
             panic!("Should be in loading state WaitingScene with a loaded board !");
         };
 
@@ -176,11 +234,7 @@ impl Plugin for Game {
                         ((height as f32) - 1.) / 2.,
                         -5.,
                     ))
-                    .with_local_rotation(UnitQuaternion::from_euler_angles(
-                        0.,
-                        0.,
-                        std::f32::consts::PI,
-                    ))
+                    .with_local_rotation(rotation())
                     .build(),
             ),
         )
@@ -193,22 +247,56 @@ impl Plugin for Game {
 
         let images = self.images.as_ref().expect("Images should be loaded.");
 
+        let mut crates = Vec::with_capacity(board.num_crates());
+
+        let player = {
+            let (i, j) = board.player();
+            Self::draw_texture(
+                scene,
+                material_for_player(images, self.direction),
+                i,
+                j,
+                -0.1,
+            )
+        };
+
         for j in 0..height {
             for i in 0..width {
                 use CellKind::*;
-                match board.get(i, j) {
-                    BoardElem(_, Void) => (),
-                    BoardElem(_, Wall) => Self::draw_texture(scene, images.mur.clone(), i, j),
-                    BoardElem(_, Floor) => Self::draw_texture(scene, images.sol.clone(), i, j),
-                    BoardElem(_, Target) => {
-                        // TODO: il serait mieux d'enlever la transparence avec la couleur du sol ?
-                        Self::draw_texture(scene, images.sol.clone(), i, j);
-                        Self::draw_texture(scene, images.objectif.clone(), i, j);
+                let BoardElem(movable, under) = board.get(i, j);
+                match under {
+                    Void => (),
+                    Wall => {
+                        Self::draw_texture(scene, images.mur.clone(), i, j, 0.);
                     }
+                    Floor => {
+                        Self::draw_texture(scene, images.sol.clone(), i, j, 0.);
+                    }
+                    Target => {
+                        // TODO: il serait mieux d'enlever la transparence avec la couleur du sol ?
+                        Self::draw_texture(scene, images.sol.clone(), i, j, 0.);
+                        Self::draw_texture(scene, images.objectif.clone(), i, j, 0.);
+                    }
+                }
+
+                if let Some(MovableItem::Crate(caisse)) = movable {
+                    let (i, j) = caisse.pos();
+                    crates.push(Self::draw_texture(
+                        scene,
+                        material_for_crate(images, under),
+                        i,
+                        j,
+                        0.,
+                    ));
                 }
             }
         }
 
-        // TODO: register players and crates
+        self.board = LoadingState::SceneFilled {
+            board,
+            scene: scene_h,
+            player,
+            crates,
+        }
     }
 }

@@ -1,0 +1,4 @@
+(
+    minification_filter: Nearest,
+    magnification_filter: Nearest,
+)

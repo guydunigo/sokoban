@@ -3,22 +3,21 @@ use fyrox::{
     asset::{untyped::ResourceKind, Resource},
     core::{
         algebra::{UnitQuaternion, Vector3},
-        futures::TryFutureExt,
         pool::Handle,
         reflect::prelude::*,
         visitor::prelude::*,
     },
-    event::Event,
+    event::{ElementState, Event, WindowEvent},
     gui::message::UiMessage,
+    keyboard::{Key, NamedKey},
     material::{Material, MaterialResource},
     plugin::{Plugin, PluginContext, PluginRegistrationContext},
-    resource::texture::{
-        Texture, TextureImportOptions, TextureMagnificationFilter, TextureMinificationFilter,
-    },
+    resource::texture::{Texture, TextureMagnificationFilter, TextureMinificationFilter},
     scene::{
         base::BaseBuilder,
         camera::{CameraBuilder, OrthographicProjection, Projection, SkyBox},
         dim2::rectangle::RectangleBuilder,
+        graph::Graph,
         node::Node,
         transform::TransformBuilder,
         Scene,
@@ -68,24 +67,34 @@ struct Images {
 }
 
 impl Images {
-    fn load_material(context: &PluginContext, path: impl AsRef<Path>) -> MaterialResource {
-        // TODO: can't seem to load with TextureImportOptions directly...
-        // TODO: spawn an async task to wait on texture and set those options ?
-        // let texture_options = TextureImportOptions::default()
-        //     .with_magnification_filter(TextureMagnificationFilter::Nearest)
-        //     .with_minification_filter(TextureMinificationFilter::Nearest);
+    fn load_material(context: &mut PluginContext, path: impl AsRef<Path>) -> MaterialResource {
+        let pathbuf = path.as_ref().to_path_buf();
 
-        let texture_resource: Resource<Texture> = context.resource_manager.request(path);
+        let texture_resource = context.resource_manager.request(path);
 
         let mut material = Material::standard_2d();
         material
             .set_texture(&"diffuseTexture".into(), Some(texture_resource))
             .unwrap();
 
+        // TODO: So ugly...
+        let resource_manager = context.resource_manager.clone();
+        context.task_pool.spawn_plugin_task(
+            async move {
+                let texture_resource: Resource<Texture> =
+                    resource_manager.request(pathbuf).await.unwrap();
+
+                let mut texture = texture_resource.data_ref();
+                texture.set_magnification_filter(TextureMagnificationFilter::Nearest);
+                texture.set_minification_filter(TextureMinificationFilter::Nearest);
+            },
+            |_, _: &mut Game, _| {},
+        );
+
         MaterialResource::new_ok(ResourceKind::Embedded, material)
     }
 
-    pub fn load(context: &PluginContext) -> Self {
+    pub fn load(context: &mut PluginContext) -> Self {
         Images {
             caisse: Self::load_material(context, "data/images/caisse.jpg"),
             caisse_ok: Self::load_material(context, "data/images/caisse_ok.jpg"),
@@ -139,7 +148,7 @@ pub struct Game {
 }
 
 impl Game {
-    fn draw_texture(
+    fn create_rectangle(
         scene: &mut Scene,
         material: MaterialResource,
         i: u32,
@@ -158,6 +167,41 @@ impl Game {
             .with_material(material)
             .build(&mut scene.graph)
     }
+
+    fn reset(&mut self, context: &mut PluginContext) {
+        let (board, scene, player, crates) = self.board.unwrap_scene_filled();
+        board.reset();
+        self.direction = Direction::Down;
+        let mut graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
+
+        Self::update_node_pos(&mut graph, *player, board.player());
+
+        crates
+            .iter()
+            .zip(board.crates())
+            .for_each(|(h, c)| Self::update_node_pos(graph, *h, c.pos()));
+    }
+
+    fn update_node_pos(graph: &mut Graph, node: Handle<Node>, (i, j): (u32, u32)) {
+        let current_transform = graph[node].local_transform_mut();
+        current_transform.set_position(Vector3::new(
+            i as f32,
+            j as f32,
+            current_transform.position().z,
+        ));
+    }
+
+    fn do_move_player(&mut self, context: &mut PluginContext, dir: Direction) {
+        let (board, scene, player, _) = self.board.unwrap_scene_filled();
+        if let Some(moved) = board.do_move_player(dir) {
+            let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
+            Self::update_node_pos(graph, *player, board.player());
+            if let Some(moved) = moved {
+                Self::update_node_pos(graph, *moved_crate, moved);
+            }
+        }
+        self.direction = dir;
+    }
 }
 
 impl Plugin for Game {
@@ -165,7 +209,7 @@ impl Plugin for Game {
         // Register your scripts here.
     }
 
-    fn init(&mut self, scene_path: Option<&str>, context: PluginContext) {
+    fn init(&mut self, scene_path: Option<&str>, mut context: PluginContext) {
         context
             .async_scene_loader
             .request(scene_path.unwrap_or("data/scene.rgs"));
@@ -182,7 +226,7 @@ impl Plugin for Game {
         };
 
         self.board = LoadingState::WaitingScene(board);
-        self.images = Some(Images::load(&context));
+        self.images = Some(Images::load(&mut context));
     }
 
     fn on_deinit(&mut self, _context: PluginContext) {
@@ -194,8 +238,24 @@ impl Plugin for Game {
         // self.board.unwrap().player
     }
 
-    fn on_os_event(&mut self, _event: &Event<()>, _context: PluginContext) {
+    fn on_os_event(&mut self, event: &Event<()>, mut context: PluginContext) {
         // Do something on OS event here.
+        if let Event::WindowEvent { event, .. } = event {
+            if let WindowEvent::KeyboardInput { event, .. } = event {
+                if event.state == ElementState::Pressed {
+                    match &event.logical_key {
+                        Key::Named(NamedKey::Escape) => context.window_target.unwrap().exit(),
+                        Key::Character(val) if val == "q" => context.window_target.unwrap().exit(),
+                        Key::Character(val) if val == "r" => self.reset(&mut context),
+                        Key::Named(NamedKey::ArrowLeft) => self.do_move_player(Direction::Left),
+                        Key::Named(NamedKey::ArrowRight) => self.do_move_player(Direction::Right),
+                        Key::Named(NamedKey::ArrowUp) => self.do_move_player(Direction::Up),
+                        Key::Named(NamedKey::ArrowDown) => self.do_move_player(Direction::Down),
+                        _ => (),
+                    }
+                }
+            }
+        }
     }
 
     fn on_ui_message(&mut self, _context: &mut PluginContext, _message: &UiMessage) {
@@ -247,16 +307,16 @@ impl Plugin for Game {
 
         let images = self.images.as_ref().expect("Images should be loaded.");
 
-        let mut crates = Vec::with_capacity(board.num_crates());
+        let mut crates = Vec::with_capacity(board.crates().len());
 
         let player = {
             let (i, j) = board.player();
-            Self::draw_texture(
+            Self::create_rectangle(
                 scene,
                 material_for_player(images, self.direction),
                 i,
                 j,
-                -0.1,
+                -0.,
             )
         };
 
@@ -267,21 +327,21 @@ impl Plugin for Game {
                 match under {
                     Void => (),
                     Wall => {
-                        Self::draw_texture(scene, images.mur.clone(), i, j, 0.);
+                        Self::create_rectangle(scene, images.mur.clone(), i, j, 0.);
                     }
                     Floor => {
-                        Self::draw_texture(scene, images.sol.clone(), i, j, 0.);
+                        Self::create_rectangle(scene, images.sol.clone(), i, j, 0.);
                     }
                     Target => {
                         // TODO: il serait mieux d'enlever la transparence avec la couleur du sol ?
-                        Self::draw_texture(scene, images.sol.clone(), i, j, 0.);
-                        Self::draw_texture(scene, images.objectif.clone(), i, j, 0.);
+                        Self::create_rectangle(scene, images.sol.clone(), i, j, 0.);
+                        Self::create_rectangle(scene, images.objectif.clone(), i, j, 0.);
                     }
                 }
 
                 if let Some(MovableItem::Crate(caisse)) = movable {
                     let (i, j) = caisse.pos();
-                    crates.push(Self::draw_texture(
+                    crates.push(Self::create_rectangle(
                         scene,
                         material_for_crate(images, under),
                         i,

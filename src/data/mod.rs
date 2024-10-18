@@ -87,8 +87,8 @@ impl Board {
         self.player
     }
 
-    pub fn num_crates(&self) -> usize {
-        self.crates.len()
+    pub fn crates(&self) -> &[Crate] {
+        &self.crates[..]
     }
 
     /// The player can move unless there is an *uncrossable* cell (see [`CellKind::is_crossable`]) or an unmovable crate in the way.

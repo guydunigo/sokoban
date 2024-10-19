@@ -3,17 +3,25 @@ use fyrox::{
     asset::{untyped::ResourceKind, Resource},
     core::{
         algebra::{UnitQuaternion, Vector3},
+        math::curve::{Curve, CurveKey, CurveKeyKind},
         pool::Handle,
         reflect::prelude::*,
         visitor::prelude::*,
     },
     event::{ElementState, Event, WindowEvent},
+    generic_animation::{
+        container::{TrackDataContainer, TrackValueKind},
+        track::Track,
+        value::ValueBinding,
+        Animation,
+    },
     gui::message::UiMessage,
     keyboard::{Key, NamedKey},
     material::{Material, MaterialResource},
     plugin::{Plugin, PluginContext, PluginRegistrationContext},
     resource::texture::{Texture, TextureMagnificationFilter, TextureMinificationFilter},
     scene::{
+        animation::{AnimationContainer, AnimationPlayer, AnimationPlayerBuilder},
         base::BaseBuilder,
         camera::{CameraBuilder, OrthographicProjection, Projection, SkyBox},
         dim2::rectangle::{Rectangle, RectangleBuilder},
@@ -27,6 +35,7 @@ use sokoban::{Board, BoardElem, CellKind, Crate, Direction};
 use std::{env::args, fs::read_to_string, mem, path::Path, str::FromStr};
 
 const DEFAULT_LEVEL_FILENAME: &str = "../map.txt";
+const ANIMATION_NAME: &str = "move";
 
 // Re-export the engine.
 pub use fyrox;
@@ -120,7 +129,9 @@ enum LoadingState {
         scene: Handle<Scene>,
         player: Handle<Node>,
         crates: Vec<Handle<Node>>,
+        animation_player: Handle<Node>,
     },
+    Won,
 }
 
 impl LoadingState {
@@ -132,6 +143,7 @@ impl LoadingState {
         &Handle<Scene>,
         &Handle<Node>,
         &[Handle<Node>],
+        &Handle<Node>,
     ) {
         if let LoadingState::SceneFilled {
             images,
@@ -139,9 +151,10 @@ impl LoadingState {
             scene,
             player,
             crates,
+            animation_player,
         } = self
         {
-            (images, board, scene, player, &crates[..])
+            (images, board, scene, player, &crates[..], animation_player)
         } else {
             panic!("Game should be in LoadingStata::SceneFilled with all the board loaded into the scene !");
         }
@@ -175,8 +188,36 @@ impl Game {
             .build(&mut scene.graph)
     }
 
+    fn reset_animations(
+        graph: &mut Graph,
+        animation_player: Handle<Node>,
+    ) -> &mut Animation<Handle<Node>> {
+        let animation_player: &mut AnimationPlayer = graph[animation_player].cast_mut().unwrap();
+        let animations = animation_player.animations_mut();
+        // Ugly but I just need it working...
+        let (_, animation) = animations.find_by_name_mut(ANIMATION_NAME).unwrap();
+        // Empty all current tracks.
+        while let Some(_) = animation.pop_track() {}
+
+        animation.set_name(ANIMATION_NAME);
+        animation.set_enabled(true);
+        animation
+    }
+
+    fn add_animation(animation: &mut Animation<Handle<Node>>, node: Handle<Node>) {
+        let mut frames_container = TrackDataContainer::new(TrackValueKind::Vector3);
+        // We'll animate only X coordinate (at index 0).
+        frames_container.curves_mut()[0] =
+            Curve::from(vec![CurveKey::new(1.0, -1.0, CurveKeyKind::Linear)]);
+        // Create a track that will animated the node using the curve above.
+        let mut track = Track::new(frames_container, ValueBinding::Position);
+        track.set_target(node);
+        animation.add_track(track);
+        todo!();
+    }
+
     fn reset(&mut self, context: &mut PluginContext) {
-        let (_, board, scene, player, crates) = self.board.unwrap_scene_filled();
+        let (_, board, scene, player, crates, animation_player) = self.board.unwrap_scene_filled();
         board.reset();
         self.direction = Direction::Down;
         let mut graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
@@ -187,6 +228,11 @@ impl Game {
             .iter()
             .zip(board.crates())
             .for_each(|(h, c)| Self::update_node_pos(graph, *h, c.pos()));
+
+        todo!(
+            "Animations for all movables to their new places {:?}",
+            animation_player
+        );
     }
 
     fn update_node_pos(graph: &mut Graph, node: Handle<Node>, (i, j): (u32, u32)) {
@@ -199,7 +245,13 @@ impl Game {
     }
 
     fn do_move_player(&mut self, context: &mut PluginContext, dir: Direction) {
-        let (images, board, scene, player, crates) = self.board.unwrap_scene_filled();
+        let (images, board, scene, player, crates, animation_player) =
+            self.board.unwrap_scene_filled();
+
+        todo!(
+            "Animations for all movables to their new places {:?}",
+            animation_player
+        );
 
         let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
         graph[*player]
@@ -222,8 +274,13 @@ impl Game {
                     .unwrap()
                     .material_mut()
                     .set_value_and_mark_modified(material_for_crate(images, board, &moved_crate));
+
+                if board.has_won() {
+                    let _ = mem::replace(&mut self.board, LoadingState::Won);
+                }
             }
         }
+
         self.direction = dir;
     }
 }
@@ -265,23 +322,31 @@ impl Plugin for Game {
         if let Event::WindowEvent { event, .. } = event {
             if let WindowEvent::KeyboardInput { event, .. } = event {
                 if event.state == ElementState::Pressed {
-                    match &event.logical_key {
-                        Key::Named(NamedKey::Escape) => context.window_target.unwrap().exit(),
-                        Key::Character(val) if val == "q" => context.window_target.unwrap().exit(),
-                        Key::Character(val) if val == "r" => self.reset(&mut context),
-                        Key::Named(NamedKey::ArrowLeft) => {
-                            self.do_move_player(&mut context, Direction::Left)
+                    if matches!(self.board, LoadingState::Won) {
+                        if matches!(&event.logical_key, Key::Named(NamedKey::Escape)) {
+                            context.window_target.unwrap().exit();
                         }
-                        Key::Named(NamedKey::ArrowRight) => {
-                            self.do_move_player(&mut context, Direction::Right)
+                    } else {
+                        match &event.logical_key {
+                            Key::Named(NamedKey::Escape) => context.window_target.unwrap().exit(),
+                            Key::Character(val) if val == "q" => {
+                                context.window_target.unwrap().exit()
+                            }
+                            Key::Character(val) if val == "r" => self.reset(&mut context),
+                            Key::Named(NamedKey::ArrowLeft) => {
+                                self.do_move_player(&mut context, Direction::Left)
+                            }
+                            Key::Named(NamedKey::ArrowRight) => {
+                                self.do_move_player(&mut context, Direction::Right)
+                            }
+                            Key::Named(NamedKey::ArrowUp) => {
+                                self.do_move_player(&mut context, Direction::Up)
+                            }
+                            Key::Named(NamedKey::ArrowDown) => {
+                                self.do_move_player(&mut context, Direction::Down)
+                            }
+                            _ => (),
                         }
-                        Key::Named(NamedKey::ArrowUp) => {
-                            self.do_move_player(&mut context, Direction::Up)
-                        }
-                        Key::Named(NamedKey::ArrowDown) => {
-                            self.do_move_player(&mut context, Direction::Down)
-                        }
-                        _ => (),
                     }
                 }
             }
@@ -309,7 +374,6 @@ impl Plugin for Game {
     ) {
         let scene = context.scenes.try_get_mut(scene_h).unwrap();
 
-        // TODO: mem::take ugly ?
         let LoadingState::WaitingScene(board, images) = mem::take(&mut self.board) else {
             panic!("Should be in loading state WaitingScene with a loaded board and images !");
         };
@@ -344,6 +408,19 @@ impl Plugin for Game {
                 j,
                 -0.,
             )
+        };
+
+        let animation_player = {
+            let mut anc = AnimationContainer::new();
+            let mut animation = Animation::default();
+            animation.set_time_slice(0.0..2.2);
+            animation.set_loop(false);
+            animation.set_enabled(true);
+            anc.add(animation);
+
+            AnimationPlayerBuilder::new(BaseBuilder::new())
+                .with_animations(anc)
+                .build(&mut scene.graph)
         };
 
         let crates = board
@@ -382,6 +459,7 @@ impl Plugin for Game {
             scene: scene_h,
             player,
             crates,
+            animation_player,
         }
     }
 }

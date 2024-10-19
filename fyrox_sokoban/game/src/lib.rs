@@ -204,7 +204,12 @@ impl Game {
         animation
     }
 
-    fn add_animation(animation: &mut Animation<Handle<Node>>, node: Handle<Node>) {
+    fn add_animation(
+        animation: &mut Animation<Handle<Node>>,
+        node: Handle<Node>,
+        dir: Direction,
+        dst: u32,
+    ) {
         let mut frames_container = TrackDataContainer::new(TrackValueKind::Vector3);
         // We'll animate only X coordinate (at index 0).
         frames_container.curves_mut()[0] =
@@ -212,6 +217,7 @@ impl Game {
         // Create a track that will animated the node using the curve above.
         let mut track = Track::new(frames_container, ValueBinding::Position);
         track.set_target(node);
+
         animation.add_track(track);
         todo!();
     }

@@ -36,6 +36,7 @@ use std::{env::args, fs::read_to_string, mem, path::Path, str::FromStr};
 
 const DEFAULT_LEVEL_FILENAME: &str = "../map.txt";
 const ANIMATION_NAME: &str = "move";
+const ANIMATION_DURATION: f32 = 0.2;
 
 // Re-export the engine.
 pub use fyrox;
@@ -197,10 +198,14 @@ impl Game {
         // Ugly but I just need it working...
         let (_, animation) = animations.find_by_name_mut(ANIMATION_NAME).unwrap();
         // Empty all current tracks.
-        while let Some(_) = animation.pop_track() {}
+        if animation.time_position() == ANIMATION_DURATION {
+            while let Some(_) = animation.pop_track() {}
+            // TODO: resets current animation... Would be cool to let them continue from where they
+            // are : have a different animation or shift current ?
+        }
 
-        animation.set_name(ANIMATION_NAME);
         animation.set_enabled(true);
+        animation.rewind();
         animation
     }
 
@@ -208,39 +213,67 @@ impl Game {
         animation: &mut Animation<Handle<Node>>,
         node: Handle<Node>,
         dir: Direction,
-        dst: u32,
+        dst: (u32, u32),
     ) {
+        use Direction::*;
+        let (xyz, src, dst, other) = match dir {
+            Up => (1, dst.1 + 1, dst.1, dst.0),
+            Down => (1, dst.1 - 1, dst.1, dst.0),
+            Left => (0, dst.0 + 1, dst.0, dst.1),
+            Right => (0, dst.0 - 1, dst.0, dst.1),
+        };
+
         let mut frames_container = TrackDataContainer::new(TrackValueKind::Vector3);
         // We'll animate only X coordinate (at index 0).
-        frames_container.curves_mut()[0] =
-            Curve::from(vec![CurveKey::new(1.0, -1.0, CurveKeyKind::Linear)]);
+        frames_container.curves_mut()[xyz] = Curve::from(vec![
+            CurveKey::new(0.0, src as f32, CurveKeyKind::Linear),
+            CurveKey::new(ANIMATION_DURATION, dst as f32, CurveKeyKind::Linear),
+        ]);
+        frames_container.curves_mut()[1 - xyz] = Curve::from(vec![CurveKey::new(
+            0.0,
+            other as f32,
+            CurveKeyKind::Constant,
+        )]);
         // Create a track that will animated the node using the curve above.
         let mut track = Track::new(frames_container, ValueBinding::Position);
         track.set_target(node);
 
         animation.add_track(track);
-        todo!();
     }
 
     fn reset(&mut self, context: &mut PluginContext) {
-        let (_, board, scene, player, crates, animation_player) = self.board.unwrap_scene_filled();
+        let (images, board, scene, player, crates, animation_player) =
+            self.board.unwrap_scene_filled();
         board.reset();
-        self.direction = Direction::Down;
-        let mut graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
 
-        Self::update_node_pos(&mut graph, *player, board.player());
+        self.direction = Direction::default();
 
-        crates
-            .iter()
-            .zip(board.crates())
-            .for_each(|(h, c)| Self::update_node_pos(graph, *h, c.pos()));
+        let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
 
-        todo!(
-            "Animations for all movables to their new places {:?}",
-            animation_player
-        );
+        let mut animation = Self::reset_animations(graph, *animation_player);
+
+        // Self::update_node_pos(&mut graph, *player, board.player());
+        Self::add_animation(&mut animation, *player, self.direction, board.player());
+
+        crates.iter().zip(board.crates()).for_each(|(h, c)|
+            // Self::update_node_pos(graph, *h, c.pos())
+            Self::add_animation(&mut animation, *h, self.direction, c.pos()));
+
+        graph[*player]
+            .cast_mut::<Rectangle>()
+            .unwrap()
+            .material_mut()
+            .set_value_and_mark_modified(material_for_player(images, self.direction));
+        crates.iter().zip(board.crates()).for_each(|(h, c)| {
+            graph[*h]
+                .cast_mut::<Rectangle>()
+                .unwrap()
+                .material_mut()
+                .set_value_and_mark_modified(material_for_crate(images, board, &c));
+        });
     }
 
+    /*
     fn update_node_pos(graph: &mut Graph, node: Handle<Node>, (i, j): (u32, u32)) {
         let current_transform = graph[node].local_transform_mut();
         current_transform.set_position(Vector3::new(
@@ -249,15 +282,11 @@ impl Game {
             current_transform.position().z,
         ));
     }
+    */
 
     fn do_move_player(&mut self, context: &mut PluginContext, dir: Direction) {
         let (images, board, scene, player, crates, animation_player) =
             self.board.unwrap_scene_filled();
-
-        todo!(
-            "Animations for all movables to their new places {:?}",
-            animation_player
-        );
 
         let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
         graph[*player]
@@ -267,13 +296,17 @@ impl Game {
             .set_value_and_mark_modified(material_for_player(images, dir));
 
         if let Some(moved_crate_index) = board.do_move_player(dir) {
-            Self::update_node_pos(graph, *player, board.player());
+            let mut animation = Self::reset_animations(graph, *animation_player);
+
+            // Self::update_node_pos(graph, *player, board.player());
+            Self::add_animation(&mut animation, *player, dir, board.player());
 
             if let Some(moved_crate_index) = moved_crate_index {
                 let moved_crate = board.crates()[moved_crate_index];
                 let crate_rect = crates[moved_crate_index];
 
-                Self::update_node_pos(graph, crates[moved_crate_index], moved_crate.pos());
+                Self::add_animation(&mut animation, crate_rect, dir, moved_crate.pos());
+                // Self::update_node_pos(graph, crates[moved_crate_index], moved_crate.pos());
 
                 graph[crate_rect]
                     .cast_mut::<Rectangle>()
@@ -405,6 +438,15 @@ impl Plugin for Game {
         .with_skybox(SkyBox::default())
         .build(&mut scene.graph);
 
+        let mut animation = {
+            let mut animation = Animation::default();
+            animation.set_name(ANIMATION_NAME);
+            animation.set_time_slice(0.0..ANIMATION_DURATION);
+            animation.set_loop(false);
+            animation.set_enabled(true);
+            animation
+        };
+
         let player = {
             let (i, j) = board.player();
             Self::create_rectangle(
@@ -415,26 +457,17 @@ impl Plugin for Game {
                 -0.,
             )
         };
-
-        let animation_player = {
-            let mut anc = AnimationContainer::new();
-            let mut animation = Animation::default();
-            animation.set_time_slice(0.0..2.2);
-            animation.set_loop(false);
-            animation.set_enabled(true);
-            anc.add(animation);
-
-            AnimationPlayerBuilder::new(BaseBuilder::new())
-                .with_animations(anc)
-                .build(&mut scene.graph)
-        };
+        Self::add_animation(&mut animation, player, Direction::default(), board.player());
 
         let crates = board
             .crates()
             .iter()
             .map(|c| {
                 let (i, j) = c.pos();
-                Self::create_rectangle(scene, material_for_crate(&images, &board, c), i, j, 0.)
+                let ch =
+                    Self::create_rectangle(scene, material_for_crate(&images, &board, c), i, j, 0.);
+                Self::add_animation(&mut animation, ch, Direction::default(), c.pos());
+                ch
             })
             .collect();
 
@@ -458,6 +491,15 @@ impl Plugin for Game {
                 }
             }
         }
+
+        let animation_player = {
+            let mut anc = AnimationContainer::new();
+            anc.add(animation);
+
+            AnimationPlayerBuilder::new(BaseBuilder::new())
+                .with_animations(anc)
+                .build(&mut scene.graph)
+        };
 
         self.board = LoadingState::SceneFilled {
             images,

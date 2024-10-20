@@ -3,6 +3,7 @@ use fyrox::{
     asset::{untyped::ResourceKind, Resource},
     core::{
         algebra::{UnitQuaternion, Vector3},
+        color::Color,
         math::curve::{Curve, CurveKey, CurveKeyKind},
         pool::Handle,
         reflect::prelude::*,
@@ -15,7 +16,17 @@ use fyrox::{
         value::ValueBinding,
         Animation,
     },
-    gui::message::UiMessage,
+    gui::{
+        border::BorderBuilder,
+        brush::Brush,
+        formatted_text::WrapMode,
+        grid::{Column, GridBuilder, Row},
+        message::{MessageDirection, UiMessage},
+        screen::ScreenBuilder,
+        text::{TextBuilder, TextMessage},
+        widget::WidgetBuilder,
+        HorizontalAlignment, Thickness, UiNode,
+    },
     keyboard::{Key, NamedKey},
     material::{Material, MaterialResource},
     plugin::{Plugin, PluginContext, PluginRegistrationContext},
@@ -32,7 +43,7 @@ use fyrox::{
     },
 };
 use sokoban::{Board, BoardElem, CellKind, Crate, Direction};
-use std::{env::args, fs::read_to_string, mem, path::Path, str::FromStr};
+use std::{fs::read_to_string, mem, path::Path, str::FromStr};
 
 const DEFAULT_LEVEL_FILENAME: &str = "../map.txt";
 const ANIMATION_NAME: &str = "move";
@@ -131,6 +142,7 @@ enum LoadingState {
         player: Handle<Node>,
         crates: Vec<Handle<Node>>,
         animation_player: Handle<Node>,
+        fps: Handle<UiNode>,
     },
     Won,
 }
@@ -145,6 +157,7 @@ impl LoadingState {
         &Handle<Node>,
         &[Handle<Node>],
         &Handle<Node>,
+        &Handle<UiNode>,
     ) {
         if let LoadingState::SceneFilled {
             images,
@@ -153,9 +166,18 @@ impl LoadingState {
             player,
             crates,
             animation_player,
+            fps,
         } = self
         {
-            (images, board, scene, player, &crates[..], animation_player)
+            (
+                images,
+                board,
+                scene,
+                player,
+                &crates[..],
+                animation_player,
+                fps,
+            )
         } else {
             panic!("Game should be in LoadingStata::SceneFilled with all the board loaded into the scene !");
         }
@@ -242,7 +264,7 @@ impl Game {
     }
 
     fn reset(&mut self, context: &mut PluginContext) {
-        let (images, board, scene, player, crates, animation_player) =
+        let (images, board, scene, player, crates, animation_player, _) =
             self.board.unwrap_scene_filled();
         board.reset();
 
@@ -285,7 +307,7 @@ impl Game {
     */
 
     fn do_move_player(&mut self, context: &mut PluginContext, dir: Direction) {
-        let (images, board, scene, player, crates, animation_player) =
+        let (images, board, scene, player, crates, animation_player, _) =
             self.board.unwrap_scene_filled();
 
         let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
@@ -316,6 +338,46 @@ impl Game {
 
                 if board.has_won() {
                     let _ = mem::replace(&mut self.board, LoadingState::Won);
+                    let ui = context.user_interfaces.first_mut();
+                    let text =
+                        TextBuilder::new(WidgetBuilder::new().with_margin(Thickness::uniform(20.)))
+                            .with_horizontal_text_alignment(HorizontalAlignment::Center)
+                            .with_text("You won!\n(Press Escape key to quit...)")
+                            .with_wrap(WrapMode::Word)
+                            .with_font_size(21.)
+                            .build(&mut ui.build_ctx());
+                    let border = BorderBuilder::new(
+                        WidgetBuilder::new()
+                            .with_child(text)
+                            .on_row(1)
+                            .on_column(1)
+                            .with_background(Brush::Solid(Color::from_rgba(150, 150, 0, 200))),
+                    )
+                    .with_corner_radius(20.)
+                    .with_stroke_thickness(Thickness::uniform(0.))
+                    .build(&mut ui.build_ctx());
+
+                    ScreenBuilder::new(
+                        WidgetBuilder::new().with_child(
+                            GridBuilder::new(
+                                WidgetBuilder::new()
+                                    .with_width(300.0)
+                                    .with_height(400.0)
+                                    .with_child(border),
+                            )
+                            // Split the grid into 3 rows and 3 columns. The center cell contain the stack panel
+                            // instance, that basically stacks main menu buttons one on top of another. The center
+                            // cell will also be always centered in screen bounds.
+                            .add_row(Row::stretch())
+                            .add_row(Row::auto())
+                            .add_row(Row::stretch())
+                            .add_column(Column::stretch())
+                            .add_column(Column::auto())
+                            .add_column(Column::stretch())
+                            .build(&mut ui.build_ctx()),
+                        ),
+                    )
+                    .build(&mut ui.build_ctx());
                 }
             }
         }
@@ -336,7 +398,7 @@ impl Plugin for Game {
 
         // TODO: better error handling
         let board = {
-            let arg1 = args().nth(1);
+            let arg1 = std::env::var("SOKOBAN_LEVEL");
             let level_filename = arg1.as_ref().map_or(DEFAULT_LEVEL_FILENAME, |f| &f[..]);
 
             let level = read_to_string(level_filename)
@@ -352,8 +414,19 @@ impl Plugin for Game {
         // Do a cleanup here.
     }
 
-    fn update(&mut self, _context: &mut PluginContext) {
+    fn update(&mut self, context: &mut PluginContext) {
         // Add your global update code here.
+        if !matches!(self.board, LoadingState::Won) {
+            let (_, _, _, _, _, _, fps) = self.board.unwrap_scene_filled();
+            context
+                .user_interfaces
+                .first_mut()
+                .send_message(TextMessage::text(
+                    *fps,
+                    MessageDirection::ToWidget,
+                    format!("fps | loop {} | render {}", f32::round(1. / context.dt), 0.), // Renderer::get_statistics().frames_per_second)
+                ));
+        }
     }
 
     fn on_os_event(&mut self, event: &Event<()>, mut context: PluginContext) {
@@ -501,6 +574,10 @@ impl Plugin for Game {
                 .build(&mut scene.graph)
         };
 
+        let fps = TextBuilder::new(WidgetBuilder::new())
+            .with_text("fps : XX")
+            .build(&mut context.user_interfaces.first_mut().build_ctx());
+
         self.board = LoadingState::SceneFilled {
             images,
             board,
@@ -508,6 +585,7 @@ impl Plugin for Game {
             player,
             crates,
             animation_player,
+            fps,
         }
     }
 }

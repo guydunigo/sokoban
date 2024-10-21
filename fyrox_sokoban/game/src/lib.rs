@@ -46,7 +46,6 @@ use sokoban::{Board, BoardElem, CellKind, Crate, Direction};
 use std::{fs::read_to_string, mem, path::Path, str::FromStr};
 
 const DEFAULT_LEVEL_FILENAME: &str = "../map.txt";
-const ANIMATION_NAME: &str = "move";
 const ANIMATION_DURATION: f32 = 0.2;
 
 // Re-export the engine.
@@ -217,17 +216,18 @@ impl Game {
     ) -> &mut Animation<Handle<Node>> {
         let animation_player: &mut AnimationPlayer = graph[animation_player].cast_mut().unwrap();
         let animations = animation_player.animations_mut();
-        // Ugly but I just need it working...
-        let (_, animation) = animations.find_by_name_mut(ANIMATION_NAME).unwrap();
-        // Empty all current tracks.
-        if animation.time_position() == ANIMATION_DURATION {
-            while let Some(_) = animation.pop_track() {}
-            // TODO: resets current animation... Would be cool to let them continue from where they
-            // are : have a different animation or shift current ?
-        }
+        // Clean up finished animations
+        animations.retain(|a| !a.has_ended());
 
+        let handle = animations.add(Self::new_animation());
+        &mut animations[handle]
+    }
+
+    fn new_animation() -> Animation<Handle<Node>> {
+        let mut animation = Animation::default();
+        animation.set_time_slice(0.0..ANIMATION_DURATION);
+        animation.set_loop(false);
         animation.set_enabled(true);
-        animation.rewind();
         animation
     }
 
@@ -511,14 +511,7 @@ impl Plugin for Game {
         .with_skybox(SkyBox::default())
         .build(&mut scene.graph);
 
-        let mut animation = {
-            let mut animation = Animation::default();
-            animation.set_name(ANIMATION_NAME);
-            animation.set_time_slice(0.0..ANIMATION_DURATION);
-            animation.set_loop(false);
-            animation.set_enabled(true);
-            animation
-        };
+        let mut animation = Self::new_animation();
 
         let player = {
             let (i, j) = board.player();

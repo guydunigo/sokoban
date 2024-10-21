@@ -116,11 +116,10 @@ impl Board {
             let new_crate = dir.to_coords(new_player.0, new_player.1);
 
             if self.map.get(new_crate.0, new_crate.1).is_crossable()
-                && self
+                && !self
                     .crates
                     .iter()
-                    .find(|c| c.pos() == (new_crate.0, new_crate.1))
-                    .is_none()
+                    .any(|c| c.pos() == (new_crate.0, new_crate.1))
             {
                 self.crates[index].do_move(new_crate.0, new_crate.1);
                 (false, Some(index))

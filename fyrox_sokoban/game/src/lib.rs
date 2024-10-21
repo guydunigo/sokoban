@@ -213,14 +213,14 @@ impl Game {
     fn reset_animations(
         graph: &mut Graph,
         animation_player: Handle<Node>,
-    ) -> &mut Animation<Handle<Node>> {
+    ) -> (&mut AnimationContainer, Handle<Animation<Handle<Node>>>) {
         let animation_player: &mut AnimationPlayer = graph[animation_player].cast_mut().unwrap();
         let animations = animation_player.animations_mut();
         // Clean up finished animations
         animations.retain(|a| !a.has_ended());
 
         let handle = animations.add(Self::new_animation());
-        &mut animations[handle]
+        (animations, handle)
     }
 
     fn new_animation() -> Animation<Handle<Node>> {
@@ -232,11 +232,22 @@ impl Game {
     }
 
     fn add_animation(
-        animation: &mut Animation<Handle<Node>>,
+        animations: &mut AnimationContainer,
+        animation: Handle<Animation<Handle<Node>>>,
         node: Handle<Node>,
         dir: Direction,
         dst: (u32, u32),
     ) {
+        // If another track in a running animation also acts on our the node, we disable it to avoid conflicts :
+        animations.iter_mut().for_each(|a| {
+            a.tracks_mut()
+                .iter_mut()
+                .filter(|t| t.target() == node)
+                .for_each(|t| t.set_enabled(false));
+        });
+
+        let animation = &mut animations[animation];
+
         use Direction::*;
         let (xyz, src, dst, other) = match dir {
             Up => (1, dst.1 + 1, dst.1, dst.0),
@@ -272,14 +283,20 @@ impl Game {
 
         let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
 
-        let mut animation = Self::reset_animations(graph, *animation_player);
+        let (animations, animation) = Self::reset_animations(graph, *animation_player);
 
         // Self::update_node_pos(&mut graph, *player, board.player());
-        Self::add_animation(&mut animation, *player, self.direction, board.player());
+        Self::add_animation(
+            animations,
+            animation,
+            *player,
+            self.direction,
+            board.player(),
+        );
 
         crates.iter().zip(board.crates()).for_each(|(h, c)|
             // Self::update_node_pos(graph, *h, c.pos())
-            Self::add_animation(&mut animation, *h, self.direction, c.pos()));
+            Self::add_animation(animations, animation, *h, self.direction, c.pos()));
 
         graph[*player]
             .cast_mut::<Rectangle>()
@@ -291,7 +308,7 @@ impl Game {
                 .cast_mut::<Rectangle>()
                 .unwrap()
                 .material_mut()
-                .set_value_and_mark_modified(material_for_crate(images, board, &c));
+                .set_value_and_mark_modified(material_for_crate(images, board, c));
         });
     }
 
@@ -318,16 +335,16 @@ impl Game {
             .set_value_and_mark_modified(material_for_player(images, dir));
 
         if let Some(moved_crate_index) = board.do_move_player(dir) {
-            let mut animation = Self::reset_animations(graph, *animation_player);
+            let (animations, animation) = Self::reset_animations(graph, *animation_player);
 
             // Self::update_node_pos(graph, *player, board.player());
-            Self::add_animation(&mut animation, *player, dir, board.player());
+            Self::add_animation(animations, animation, *player, dir, board.player());
 
             if let Some(moved_crate_index) = moved_crate_index {
                 let moved_crate = board.crates()[moved_crate_index];
                 let crate_rect = crates[moved_crate_index];
 
-                Self::add_animation(&mut animation, crate_rect, dir, moved_crate.pos());
+                Self::add_animation(animations, animation, crate_rect, dir, moved_crate.pos());
                 // Self::update_node_pos(graph, crates[moved_crate_index], moved_crate.pos());
 
                 graph[crate_rect]
@@ -431,34 +448,34 @@ impl Plugin for Game {
 
     fn on_os_event(&mut self, event: &Event<()>, mut context: PluginContext) {
         // Do something on OS event here.
-        if let Event::WindowEvent { event, .. } = event {
-            if let WindowEvent::KeyboardInput { event, .. } = event {
-                if event.state == ElementState::Pressed {
-                    if matches!(self.board, LoadingState::Won) {
-                        if matches!(&event.logical_key, Key::Named(NamedKey::Escape)) {
-                            context.window_target.unwrap().exit();
+        if let Event::WindowEvent {
+            event: WindowEvent::KeyboardInput { event, .. },
+            ..
+        } = event
+        {
+            if event.state == ElementState::Pressed {
+                if matches!(self.board, LoadingState::Won) {
+                    if matches!(&event.logical_key, Key::Named(NamedKey::Escape)) {
+                        context.window_target.unwrap().exit();
+                    }
+                } else {
+                    match &event.logical_key {
+                        Key::Named(NamedKey::Escape) => context.window_target.unwrap().exit(),
+                        Key::Character(val) if val == "q" => context.window_target.unwrap().exit(),
+                        Key::Character(val) if val == "r" => self.reset(&mut context),
+                        Key::Named(NamedKey::ArrowLeft) => {
+                            self.do_move_player(&mut context, Direction::Left)
                         }
-                    } else {
-                        match &event.logical_key {
-                            Key::Named(NamedKey::Escape) => context.window_target.unwrap().exit(),
-                            Key::Character(val) if val == "q" => {
-                                context.window_target.unwrap().exit()
-                            }
-                            Key::Character(val) if val == "r" => self.reset(&mut context),
-                            Key::Named(NamedKey::ArrowLeft) => {
-                                self.do_move_player(&mut context, Direction::Left)
-                            }
-                            Key::Named(NamedKey::ArrowRight) => {
-                                self.do_move_player(&mut context, Direction::Right)
-                            }
-                            Key::Named(NamedKey::ArrowUp) => {
-                                self.do_move_player(&mut context, Direction::Up)
-                            }
-                            Key::Named(NamedKey::ArrowDown) => {
-                                self.do_move_player(&mut context, Direction::Down)
-                            }
-                            _ => (),
+                        Key::Named(NamedKey::ArrowRight) => {
+                            self.do_move_player(&mut context, Direction::Right)
                         }
+                        Key::Named(NamedKey::ArrowUp) => {
+                            self.do_move_player(&mut context, Direction::Up)
+                        }
+                        Key::Named(NamedKey::ArrowDown) => {
+                            self.do_move_player(&mut context, Direction::Down)
+                        }
+                        _ => (),
                     }
                 }
             }
@@ -511,7 +528,8 @@ impl Plugin for Game {
         .with_skybox(SkyBox::default())
         .build(&mut scene.graph);
 
-        let mut animation = Self::new_animation();
+        let mut animations = AnimationContainer::new();
+        let animation = animations.add(Self::new_animation());
 
         let player = {
             let (i, j) = board.player();
@@ -523,7 +541,13 @@ impl Plugin for Game {
                 -0.,
             )
         };
-        Self::add_animation(&mut animation, player, Direction::default(), board.player());
+        Self::add_animation(
+            &mut animations,
+            animation,
+            player,
+            Direction::default(),
+            board.player(),
+        );
 
         let crates = board
             .crates()
@@ -532,7 +556,13 @@ impl Plugin for Game {
                 let (i, j) = c.pos();
                 let ch =
                     Self::create_rectangle(scene, material_for_crate(&images, &board, c), i, j, 0.);
-                Self::add_animation(&mut animation, ch, Direction::default(), c.pos());
+                Self::add_animation(
+                    &mut animations,
+                    animation,
+                    ch,
+                    Direction::default(),
+                    c.pos(),
+                );
                 ch
             })
             .collect();
@@ -558,14 +588,9 @@ impl Plugin for Game {
             }
         }
 
-        let animation_player = {
-            let mut anc = AnimationContainer::new();
-            anc.add(animation);
-
-            AnimationPlayerBuilder::new(BaseBuilder::new())
-                .with_animations(anc)
-                .build(&mut scene.graph)
-        };
+        let animation_player = AnimationPlayerBuilder::new(BaseBuilder::new())
+            .with_animations(animations)
+            .build(&mut scene.graph);
 
         let fps = TextBuilder::new(WidgetBuilder::new())
             .with_text("fps : XX")

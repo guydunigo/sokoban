@@ -9,6 +9,7 @@ use fyrox::{
         reflect::prelude::*,
         visitor::prelude::*,
     },
+    engine::GraphicsContext,
     event::{ElementState, Event, WindowEvent},
     generic_animation::{
         container::{TrackDataContainer, TrackValueKind},
@@ -30,6 +31,7 @@ use fyrox::{
     keyboard::{Key, NamedKey},
     material::{Material, MaterialResource},
     plugin::{Plugin, PluginContext, PluginRegistrationContext},
+    renderer::QualitySettings,
     resource::texture::{Texture, TextureMagnificationFilter, TextureMinificationFilter},
     scene::{
         animation::{AnimationContainer, AnimationPlayer, AnimationPlayerBuilder},
@@ -41,6 +43,7 @@ use fyrox::{
         transform::TransformBuilder,
         Scene,
     },
+    window::Fullscreen,
 };
 use sokoban::{Board, BoardElem, CellKind, Crate, Direction};
 use std::{fs::read_to_string, mem, path::Path, str::FromStr};
@@ -401,6 +404,45 @@ impl Game {
 
         self.direction = dir;
     }
+
+    fn toggle_fullscreen(context: PluginContext) {
+        if let GraphicsContext::Initialized(ref graphics_context) = context.graphics_context {
+            if graphics_context.window.fullscreen().is_none() {
+                /*
+                graphics_context
+                    .window
+                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
+                */
+                if let Some(monitor) = graphics_context.window.current_monitor() {
+                    if let Some(first_available_video_mode) = monitor.video_modes().next() {
+                        graphics_context
+                            .window
+                            .set_fullscreen(Some(Fullscreen::Exclusive(
+                                first_available_video_mode,
+                            )));
+                    }
+                }
+            } else {
+                graphics_context.window.set_fullscreen(None);
+            }
+        }
+    }
+
+    fn cycle_quality(context: PluginContext) {
+        if let GraphicsContext::Initialized(ref mut graphics_context) = context.graphics_context {
+            let settings = graphics_context.renderer.get_quality_settings();
+            let next_settings = if settings == QualitySettings::low() {
+                QualitySettings::medium()
+            } else if settings == QualitySettings::medium() {
+                QualitySettings::high()
+            } else {
+                QualitySettings::low()
+            };
+            let _ = graphics_context
+                .renderer
+                .set_quality_settings(&next_settings);
+        }
+    }
 }
 
 impl Plugin for Game {
@@ -435,13 +477,42 @@ impl Plugin for Game {
         // Add your global update code here.
         if !matches!(self.board, LoadingState::Won) {
             let (_, _, _, _, _, _, fps) = self.board.unwrap_scene_filled();
+
+            let frames_per_second = if let GraphicsContext::Initialized(ref graphics_context) =
+                context.graphics_context
+            {
+                graphics_context.renderer.get_statistics().frames_per_second
+            } else {
+                0
+            };
+
+            let quality = if let GraphicsContext::Initialized(ref mut graphics_context) =
+                context.graphics_context
+            {
+                let settings = graphics_context.renderer.get_quality_settings();
+                if settings == QualitySettings::low() {
+                    "low"
+                } else if settings == QualitySettings::medium() {
+                    "medium"
+                } else {
+                    "high"
+                }
+            } else {
+                "unknown"
+            };
+
             context
                 .user_interfaces
                 .first_mut()
                 .send_message(TextMessage::text(
                     *fps,
                     MessageDirection::ToWidget,
-                    format!("fps | loop {} | render {}", f32::round(1. / context.dt), 0.), // Renderer::get_statistics().frames_per_second)
+                    format!(
+                        "fps | loop {} | render {} | settings {}",
+                        f32::round(1. / context.dt),
+                        frames_per_second,
+                        quality
+                    ),
                 ));
         }
     }
@@ -463,6 +534,8 @@ impl Plugin for Game {
                         Key::Named(NamedKey::Escape) => context.window_target.unwrap().exit(),
                         Key::Character(val) if val == "q" => context.window_target.unwrap().exit(),
                         Key::Character(val) if val == "r" => self.reset(&mut context),
+                        Key::Character(val) if val == "f" => Self::toggle_fullscreen(context),
+                        Key::Character(val) if val == "g" => Self::cycle_quality(context),
                         Key::Named(NamedKey::ArrowLeft) => {
                             self.do_move_player(&mut context, Direction::Left)
                         }

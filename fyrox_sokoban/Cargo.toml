@@ -4,11 +4,10 @@ members = ["editor", "executor", "executor-wasm", "executor-android", "game", "g
 resolver = "2"
 
 [workspace.dependencies.fyrox]
-version = "0.34.1"
-default-features = false
+git = "https://github.com/FyroxEngine/Fyrox"
+
 [workspace.dependencies.fyroxed_base]
-version = "0.21.1"
-default-features = false
+git = "https://github.com/FyroxEngine/Fyrox"
 
 # Separate build profiles for hot reloading. These profiles ensures that build artifacts for
 # hot reloading will be placed into their own folders and does not interfere with standard (static)

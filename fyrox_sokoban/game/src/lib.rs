@@ -96,9 +96,7 @@ impl Images {
         let texture_resource = context.resource_manager.request(path);
 
         let mut material = Material::standard_2d();
-        material
-            .set_texture(&"diffuseTexture".into(), Some(texture_resource))
-            .unwrap();
+        material.bind("diffuseTexture", texture_resource);
 
         // TODO: So ugly...
         let resource_manager = context.resource_manager.clone();
@@ -270,6 +268,8 @@ impl Game {
             other as f32,
             CurveKeyKind::Constant,
         )]);
+        frames_container.curves_mut()[2] =
+            Curve::from(vec![CurveKey::new(0.0, -1., CurveKeyKind::Constant)]);
         // Create a track that will animated the node using the curve above.
         let mut track = Track::new(frames_container, ValueBinding::Position);
         track.set_target(node);
@@ -604,31 +604,18 @@ impl Plugin for Game {
         let mut animations = AnimationContainer::new();
         let animation = animations.add(Self::new_animation());
 
-        let player = {
-            let (i, j) = board.player();
-            Self::create_rectangle(
-                scene,
-                material_for_player(&images, self.direction),
-                i,
-                j,
-                -0.,
-            )
-        };
-        Self::add_animation(
-            &mut animations,
-            animation,
-            player,
-            Direction::default(),
-            board.player(),
-        );
-
         let crates = board
             .crates()
             .iter()
             .map(|c| {
                 let (i, j) = c.pos();
-                let ch =
-                    Self::create_rectangle(scene, material_for_crate(&images, &board, c), i, j, 0.);
+                let ch = Self::create_rectangle(
+                    scene,
+                    material_for_crate(&images, &board, c),
+                    i,
+                    j,
+                    -1.,
+                );
                 Self::add_animation(
                     &mut animations,
                     animation,
@@ -660,6 +647,24 @@ impl Plugin for Game {
                 }
             }
         }
+
+        let player = {
+            let (i, j) = board.player();
+            Self::create_rectangle(
+                scene,
+                material_for_player(&images, self.direction),
+                i,
+                j,
+                -1.,
+            )
+        };
+        Self::add_animation(
+            &mut animations,
+            animation,
+            player,
+            Direction::default(),
+            board.player(),
+        );
 
         let animation_player = AnimationPlayerBuilder::new(BaseBuilder::new())
             .with_animations(animations)

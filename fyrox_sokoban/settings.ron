@@ -5,30 +5,31 @@
     ),
     graphics: (
         quality: (
-            point_shadow_map_size: 1024,
-            point_soft_shadows: true,
-            point_shadows_enabled: true,
-            point_shadows_distance: 15.0,
-            point_shadow_map_precision: Full,
+            point_shadow_map_size: 1,
+            point_soft_shadows: false,
+            point_shadows_enabled: false,
+            point_shadows_distance: 0.0,
+            point_shadow_map_precision: Half,
             point_shadows_fade_out_range: 1.0,
-            spot_shadow_map_size: 1024,
-            spot_soft_shadows: true,
-            spot_shadows_enabled: true,
-            spot_shadows_distance: 15.0,
-            spot_shadow_map_precision: Full,
+            spot_shadow_map_size: 1,
+            spot_soft_shadows: false,
+            spot_shadows_enabled: false,
+            spot_shadows_distance: 0.0,
+            spot_shadow_map_precision: Half,
             spot_shadows_fade_out_range: 1.0,
             csm_settings: (
                 enabled: true,
-                size: 2048,
-                precision: Full,
-                pcf: true,
+                size: 512,
+                precision: Half,
+                pcf: false,
             ),
-            use_ssao: true,
+            use_ssao: false,
             ssao_radius: 0.5,
-            light_scatter_enabled: true,
-            fxaa: true,
-            use_parallax_mapping: true,
-            use_bloom: true,
+            light_scatter_enabled: false,
+            fxaa: false,
+            use_parallax_mapping: false,
+            use_bloom: false,
+            use_occlusion_culling: false,
         ),
         z_near: 0.025,
         z_far: 128.0,
@@ -210,8 +211,6 @@
     ),
     camera: (
         speed: 10.0,
-        invert_dragging: false,
-        drag_speed: 0.01,
         zoom_speed: 0.5,
         zoom_range: (
             start: 0.0,
@@ -307,6 +306,24 @@
             code: KeyS,
             modifiers: (
                 alt: false,
+                shift: false,
+                control: true,
+                system: false,
+            ),
+        ),
+        save_scene_as: Some(
+            code: KeyS,
+            modifiers: (
+                alt: false,
+                shift: true,
+                control: true,
+                system: false,
+            ),
+        ),
+        save_all_scenes: Some(
+            code: KeyS,
+            modifiers: (
+                alt: true,
                 shift: false,
                 control: true,
                 system: false,
@@ -471,13 +488,18 @@
     scene_settings: {
         "data/scene.rgs": (
             camera_settings: (
-                position: (0.0, 0.0, -3.0),
-                yaw: 0.0,
-                pitch: -0.01,
+                position: (-1.2010522, -0.04816675, -2.367154),
+                yaw: 0.25000066,
+                pitch: 0.51999927,
+                projection: Perspective((
+                    fov: 1.3089969,
+                    z_near: 0.025,
+                    z_far: 128.0,
+                )),
             ),
             node_infos: {
                 (
-                    index: 42,
+                    index: 45,
                     generation: 1,
                 ): (
                     is_expanded: true,
@@ -489,19 +511,13 @@
                     is_expanded: true,
                 ),
                 (
-                    index: 45,
+                    index: 42,
                     generation: 1,
                 ): (
                     is_expanded: true,
                 ),
                 (
                     index: 43,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 1,
                     generation: 1,
                 ): (
                     is_expanded: true,
@@ -518,6 +534,12 @@
                 ): (
                     is_expanded: true,
                 ),
+                (
+                    index: 1,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
             },
         ),
     },
@@ -529,6 +551,7 @@
     windows: (
         window_position: (0.0, 0.0),
         window_size: (1920.0, 1008.0),
+        window_maximized: true,
         layout: None,
     ),
 )

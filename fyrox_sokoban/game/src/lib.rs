@@ -4,6 +4,7 @@ use fyrox::{
     core::{
         algebra::{UnitQuaternion, Vector3},
         color::Color,
+        log::Log,
         math::curve::{Curve, CurveKey, CurveKeyKind},
         pool::Handle,
         reflect::prelude::*,
@@ -46,9 +47,14 @@ use fyrox::{
     window::Fullscreen,
 };
 use sokoban::{Board, BoardElem, CellKind, Crate, Direction};
-use std::{fs::read_to_string, mem, path::Path, str::FromStr};
+#[cfg(not(target_arch = "wasm32"))]
+use std::fs::read_to_string;
+use std::{mem, path::Path, str::FromStr};
 
+#[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_LEVEL_FILENAME: &str = "../map.txt";
+#[cfg(target_arch = "wasm32")]
+const DEFAULT_LEVEL: &str = include_str!("../../../map_sdz.txt");
 const ANIMATION_DURATION: f32 = 0.2;
 
 // Re-export the engine.
@@ -150,7 +156,7 @@ enum LoadingState {
 impl LoadingState {
     fn unwrap_scene_filled(
         &mut self,
-    ) -> (
+    ) -> Option<(
         &Images,
         &mut Board,
         &Handle<Scene>,
@@ -158,7 +164,7 @@ impl LoadingState {
         &[Handle<Node>],
         &Handle<Node>,
         &Handle<UiNode>,
-    ) {
+    )> {
         if let LoadingState::SceneFilled {
             images,
             board,
@@ -169,7 +175,7 @@ impl LoadingState {
             fps,
         } = self
         {
-            (
+            Some((
                 images,
                 board,
                 scene,
@@ -177,9 +183,10 @@ impl LoadingState {
                 &crates[..],
                 animation_player,
                 fps,
-            )
+            ))
         } else {
-            panic!("Game should be in LoadingStata::SceneFilled with all the board loaded into the scene !");
+            Log::err("Game should be in LoadingStata::SceneFilled with all the board loaded into the scene !");
+            None
         }
     }
 }
@@ -278,8 +285,11 @@ impl Game {
     }
 
     fn reset(&mut self, context: &mut PluginContext) {
-        let (images, board, scene, player, crates, animation_player, _) =
-            self.board.unwrap_scene_filled();
+        let Some((images, board, scene, player, crates, animation_player, _)) =
+            self.board.unwrap_scene_filled()
+        else {
+            return;
+        };
         board.reset();
 
         self.direction = Direction::default();
@@ -327,8 +337,11 @@ impl Game {
     */
 
     fn do_move_player(&mut self, context: &mut PluginContext, dir: Direction) {
-        let (images, board, scene, player, crates, animation_player, _) =
-            self.board.unwrap_scene_filled();
+        let Some((images, board, scene, player, crates, animation_player, _)) =
+            self.board.unwrap_scene_filled()
+        else {
+            return;
+        };
 
         let graph = &mut context.scenes.try_get_mut(*scene).unwrap().graph;
         graph[*player]
@@ -455,16 +468,19 @@ impl Plugin for Game {
             .async_scene_loader
             .request(scene_path.unwrap_or("data/scene.rgs"));
 
-        // TODO: better error handling
-        let board = {
+        #[cfg(not(target_arch = "wasm32"))]
+        let level = {
             let arg1 = std::env::var("SOKOBAN_LEVEL");
             let level_filename = arg1.as_ref().map_or(DEFAULT_LEVEL_FILENAME, |f| &f[..]);
 
-            let level = read_to_string(level_filename)
-                .expect(&format!("Could not open file `{level_filename}`.")[..]);
-
-            Board::from_str(&level[..]).expect("Failed to load level !")
+            read_to_string(level_filename)
+                .expect(&format!("Could not open file `{level_filename}`.")[..])
         };
+        #[cfg(target_arch = "wasm32")]
+        let level = DEFAULT_LEVEL;
+
+        // TODO: better error handling
+        let board = { Board::from_str(&level[..]).expect("Failed to load level !") };
 
         self.board = LoadingState::WaitingScene(board, Images::load(&mut context));
     }
@@ -476,7 +492,9 @@ impl Plugin for Game {
     fn update(&mut self, context: &mut PluginContext) {
         // Add your global update code here.
         if !matches!(self.board, LoadingState::Won) {
-            let (_, _, _, _, _, _, fps) = self.board.unwrap_scene_filled();
+            let Some((_, _, _, _, _, _, fps)) = self.board.unwrap_scene_filled() else {
+                return;
+            };
 
             let frames_per_second = if let GraphicsContext::Initialized(ref graphics_context) =
                 context.graphics_context

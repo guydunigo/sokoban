@@ -207,7 +207,6 @@ impl Game {
     ) -> Handle<Node> {
         let base_builder = BaseBuilder::new().with_local_transform(
             TransformBuilder::new()
-                // Size of the rectangle is defined only by scale.
                 .with_local_position(Vector3::new(i as f32, j as f32, z))
                 .with_local_rotation(rotation())
                 .build(),
@@ -483,6 +482,14 @@ impl Plugin for Game {
         let board = { Board::from_str(&level[..]).expect("Failed to load level !") };
 
         self.board = LoadingState::WaitingScene(board, Images::load(&mut context));
+    }
+
+    fn on_graphics_context_initialized(&mut self, context: PluginContext) {
+        if let GraphicsContext::Initialized(ref mut graphics_context) = context.graphics_context {
+            let _ = graphics_context
+                .renderer
+                .set_quality_settings(&QualitySettings::low());
+        }
     }
 
     fn on_deinit(&mut self, _context: PluginContext) {
